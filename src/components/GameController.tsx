@@ -393,7 +393,7 @@ export const GameController: React.FC<GameControllerProps> = ({
       isHost &&
       currentRound &&
       currentRound.status === 'drawing' &&
-      players.length >= 2
+      players.length >= 1
     ) {
       const allDone = players.every((p) => p.isDone);
       if (allDone) {
@@ -647,6 +647,7 @@ export const GameController: React.FC<GameControllerProps> = ({
                     onChange={(e) => { setMaxRounds(Number(e.target.value)); handleSaveSettings(); playPop(); }}
                     className="w-full text-sm p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg outline-none focus:ring-2 focus:ring-cozy-primary/20 focus:border-cozy-primary transition-all"
                   >
+                    <option value={1}>1 Round</option>
                     <option value={3}>3 Rounds</option>
                     <option value={5}>5 Rounds</option>
                     <option value={8}>8 Rounds</option>
@@ -671,7 +672,7 @@ export const GameController: React.FC<GameControllerProps> = ({
             {isHost ? (
               <button
                 onClick={() => { handleStartGame(); playPop(); }}
-                disabled={players.length < 2}
+                disabled={players.length < 1}
                 className="flex items-center gap-2 bg-cozy-primary hover:bg-cozy-primary-hover text-white font-serif font-bold px-8 py-4 rounded-2xl shadow-lg active:scale-95 transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Play size={18} className="fill-white" />
