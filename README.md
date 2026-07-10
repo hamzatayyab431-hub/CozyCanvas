@@ -10,11 +10,13 @@ Built with **Next.js 16 (App Router)**, **TypeScript**, **Tailwind CSS 4**, and 
 
 - **Smooth Freehand Drawing:** Powered by `perfect-freehand` for pressure-sensitive, calligraphic strokes.
 - **Unified Toolset:** Pen, Eraser, Flood Fill (Scanline algorithm), Lines, Rectangles, Circles, and text insertions.
+- **Canvas Layers:** Three composited layers — Background, Sketch, and Details — each with independent opacity and visibility controls.
 - **Canvas Navigation:** Viewport panning (Spacebar + drag / dual-finger drag) and zoom (scroll wheel / pinch-to-zoom).
 - **Lobby Presence:** Real-time online participant lists showing active drawing indicator animations and completed checkmarks.
 - **Reveal Mode:** Hidden drawing boards during rounds, with side-by-side reveals once both players click "Done" or time expires.
 - **Reactions & Rating:** Mutual star, heart, and crown rankings that auto-tally scores to announce a round winner.
 - **Session Gallery:** Historic cards showing drawings and reactions from all rounds in the current session.
+- **Prompt Categories:** Five themed drawing prompt packs — Animals, Objects, Relationship, Fantasy & Adventure, and Silly & Absurd.
 - **Synth Audio Feedback:** Mellow synthesized pops, chimes, fanfares, and warning countdown sound effects built on the native Web Audio API (completely asset-free, toggleable).
 - **Responsive Layout:** Tailored with a cozy warm clay-cream layout matching touch viewports perfectly.
 
@@ -70,7 +72,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## 🔮 Stretch Goals & Future Ideas
 
 - **Live Collaboration Mode:** A shared board allowing players to draw simultaneously on a single canvas in real time. (The `useRoomRealtime` hook already implements `broadcastStroke` and `onDrawingReceived` wrappers to support this!).
-- **Custom Prompt Packs:** Allow players to upload or customize their own banks of text prompts.
-- **Layers support:** Implement background, sketch, and detailing layers on the canvas.
+- ~~**Custom Prompt Packs:** Allow players to upload or customize their own banks of text prompts.~~ ✅ *Done — five themed categories now ship with the app.*
+- ~~**Layers support:** Implement background, sketch, and detailing layers on the canvas.~~ ✅ *Done — Background, Sketch, and Details layers are fully implemented.*
 - **Cross-device History:** Lightweight magic-link authentication to store a persistent gallery profile.
 - **Collab Drawing Cursor Sync:** Render the partner's stylus/cursor coordinate indicators in real-time.
