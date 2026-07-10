@@ -133,6 +133,15 @@ body {
   }
 }
 
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
 .animate-cozy-float {
   animation: float 4s ease-in-out infinite;
 }
@@ -160,4 +169,16 @@ body {
 
 .cozy-interactive:active {
   transform: translateY(1px) scale(0.975);
+}
+
+/* Shimmer — for skeleton loaders and highlight badges */
+.animate-cozy-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(201, 162, 75, 0.35) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
 }
