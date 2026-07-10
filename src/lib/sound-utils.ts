@@ -207,3 +207,37 @@ export function playWarning() {
   osc.start(now);
   osc.stop(now + 0.18);
 }
+
+/**
+ * Bright two-note ascending ding for successful actions
+ * (e.g., submitting a drawing, saving a gallery card, completing a milestone)
+ */
+export function playSuccess() {
+  if (!soundEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+
+  const playDing = (freq: number, delay: number, duration: number) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now + delay);
+
+    gain.gain.setValueAtTime(0, now + delay);
+    gain.gain.linearRampToValueAtTime(0.15, now + delay + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + delay + duration);
+
+    osc.start(now + delay);
+    osc.stop(now + delay + duration + 0.05);
+  };
+
+  // Two bright ascending notes: E5 -> G5
+  playDing(659.25, 0.0, 0.35);   // E5
+  playDing(783.99, 0.15, 0.55);  // G5
+}
