@@ -58,6 +58,23 @@ export const promptCategories: PromptCategory[] = [
     ]
   },
   {
+    id: 'fantasy_adventure',
+    name: '🧙 Fantasy & Adventure',
+    description: 'Dragons, knights, and magical worlds straight out of a storybook.',
+    prompts: [
+      'A tiny dragon learning to breathe fire for the first time',
+      'A wizard who accidentally turned their wand into a rubber chicken',
+      'A mermaid discovering a shipwreck full of vintage board games',
+      'A knight in shining armor trying to defeat a dragon at a game of chess',
+      'An enchanted forest where the trees have friendly glowing eyes at night',
+      'A fairy godmother exhausted and asleep on a pile of ungranted wishes',
+      'A pirate ship sailing through a sea of fluffy pink clouds',
+      'A magical library where the books can fly around and talk to each other',
+      'A dwarf blacksmith forging a tiny magical sword for a field mouse',
+      'A phoenix rising from the ashes holding a cup of morning coffee'
+    ]
+  },
+  {
     id: 'silly_absurd',
     name: '🤪 Silly & Absurd',
     description: 'Wacky, weird, and surreal scenarios that make absolutely no sense.',
