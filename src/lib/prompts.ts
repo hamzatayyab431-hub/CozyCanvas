@@ -1,10 +1,19 @@
+/** Represents a themed collection of drawing prompts shown in the game lobby. */
 export interface PromptCategory {
+  /** Unique slug used to look up this category (e.g. 'animals', 'fantasy_adventure'). */
   id: string;
+  /** Display name shown in the category picker, including an emoji prefix. */
   name: string;
+  /** Short flavour text describing the category's theme. */
   description: string;
+  /** Array of prompt strings that the game randomly selects from during a round. */
   prompts: string[];
 }
 
+/**
+ * All available prompt categories shipped with the game.
+ * Import this array to populate category pickers or to iterate over all prompts.
+ */
 export const promptCategories: PromptCategory[] = [
   {
     id: 'animals',
@@ -93,6 +102,15 @@ export const promptCategories: PromptCategory[] = [
   }
 ];
 
+/**
+ * Returns a randomly selected prompt from the given category.
+ *
+ * @param categoryId - Optional category `id` to draw from. Pass `'all'` or omit to
+ *   pick from any category at random. If the supplied id is not found, falls back
+ *   to a random category.
+ * @returns An object with the selected `prompt` string and the `categoryName` it
+ *   came from (useful for displaying a label alongside the prompt).
+ */
 export function getRandomPrompt(categoryId?: string): { prompt: string; categoryName: string } {
   let targetCategory: PromptCategory;
 
