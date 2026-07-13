@@ -280,7 +280,7 @@ export const useRoomRealtime = ({
     }
 
     // Subscribe to channel
-    channel.subscribe((status) => {
+    channel.subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         setIsJoined(true);
         setError(null);
@@ -290,7 +290,7 @@ export const useRoomRealtime = ({
         });
       } else if (status === 'CHANNEL_ERROR') {
         setIsJoined(false);
-        setError('Failed to connect to the game server.');
+        setError(`Failed to connect to the game server: ${err ? (err.message || JSON.stringify(err)) : 'Realtime channel error'}`);
       } else if (status === 'TIMED_OUT') {
         setIsJoined(false);
         setError('Connection timed out.');
