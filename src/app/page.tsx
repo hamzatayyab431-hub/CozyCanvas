@@ -115,13 +115,13 @@ export default function Home() {
 
       if (error) {
         console.error('Error creating room:', error);
-        alert(`Failed to create room: ${error.message}`);
+        alert(`Failed to create room: ${error.message} (using Supabase URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL || 'not-loaded'})`);
       } else {
         router.push(`/room/${code}`);
       }
     } catch (err: any) {
       console.error('Unexpected error creating room:', err);
-      alert(`An error occurred: ${err.message || 'Please verify your connection.'}`);
+      alert(`An error occurred: ${err.message || 'Please verify your connection.'} (using Supabase URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL || 'not-loaded'})`);
     } finally {
       setIsCreating(false);
     }
