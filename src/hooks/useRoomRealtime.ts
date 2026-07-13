@@ -62,6 +62,23 @@ export const useRoomRealtime = ({
   const [error, setError] = useState<string | null>(null);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+
+  // Create refs for callbacks to prevent subscription recreation
+  const onRoomChangeRef = useRef(onRoomChange);
+  const onRoundChangeRef = useRef(onRoundChange);
+  const onDrawingReceivedRef = useRef(onDrawingReceived);
+  const onDrawingCompletedRef = useRef(onDrawingCompleted);
+  const onClearCanvasRef = useRef(onClearCanvas);
+  const onDrawingStateChangeRef = useRef(onDrawingStateChange);
+
+  useEffect(() => {
+    onRoomChangeRef.current = onRoomChange;
+    onRoundChangeRef.current = onRoundChange;
+    onDrawingReceivedRef.current = onDrawingReceived;
+    onDrawingCompletedRef.current = onDrawingCompleted;
+    onClearCanvasRef.current = onClearCanvas;
+    onDrawingStateChangeRef.current = onDrawingStateChange;
+  });
   
   // Store presence status locally to allow easy partial updates
   const presenceStateRef = useRef<PlayerPresence>({
@@ -207,23 +224,23 @@ export const useRoomRealtime = ({
     // 2. Broadcast Listeners (Live canvas collaboration & draw status)
     channel
       .on('broadcast', { event: 'stroke' }, ({ payload }) => {
-        if (payload.playerId !== playerId && onDrawingReceived) {
-          onDrawingReceived(payload);
+        if (payload.playerId !== playerId && onDrawingReceivedRef.current) {
+          onDrawingReceivedRef.current(payload);
         }
       })
       .on('broadcast', { event: 'drawing_completed' }, ({ payload }) => {
-        if (payload.playerId !== playerId && onDrawingCompleted) {
-          onDrawingCompleted(payload);
+        if (payload.playerId !== playerId && onDrawingCompletedRef.current) {
+          onDrawingCompletedRef.current(payload);
         }
       })
       .on('broadcast', { event: 'clear_canvas' }, () => {
-        if (onClearCanvas) {
-          onClearCanvas();
+        if (onClearCanvasRef.current) {
+          onClearCanvasRef.current();
         }
       })
       .on('broadcast', { event: 'drawing_state' }, ({ payload }) => {
-        if (payload.playerId !== playerId && onDrawingStateChange) {
-          onDrawingStateChange(payload);
+        if (payload.playerId !== playerId && onDrawingStateChangeRef.current) {
+          onDrawingStateChangeRef.current(payload);
         }
       });
 
@@ -239,8 +256,8 @@ export const useRoomRealtime = ({
           filter: `id=eq.${roomId}`,
         },
         (payload) => {
-          if (onRoomChange) {
-            onRoomChange(payload);
+          if (onRoomChangeRef.current) {
+            onRoomChangeRef.current(payload);
           }
         }
       );
@@ -255,8 +272,8 @@ export const useRoomRealtime = ({
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
-          if (onRoundChange) {
-            onRoundChange(payload);
+          if (onRoundChangeRef.current) {
+            onRoundChangeRef.current(payload);
           }
         }
       );
@@ -285,17 +302,7 @@ export const useRoomRealtime = ({
       setIsJoined(false);
       channelRef.current = null;
     };
-  }, [
-    roomCode,
-    roomId,
-    playerId,
-    onRoundChange,
-    onRoomChange,
-    onDrawingReceived,
-    onDrawingCompleted,
-    onClearCanvas,
-    onDrawingStateChange,
-  ]);
+  }, [roomCode, roomId, playerId]);
 
   return {
     playerId,

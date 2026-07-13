@@ -379,13 +379,17 @@ export const GameController: React.FC<GameControllerProps> = ({
     try {
       const promptsArr = customPromptsText.split('\n').map(p => p.trim()).filter(Boolean);
       // Update room status
-      await supabase
+      const { error: roomError } = await supabase
         .from('rooms')
         .update({
           status: 'playing',
           settings: { maxRounds, roundDuration, category, customPrompts: promptsArr }
         })
         .eq('id', room.id);
+
+      if (roomError) {
+        throw roomError;
+      }
 
       // Select random prompt
       let prompt = '';
@@ -397,7 +401,7 @@ export const GameController: React.FC<GameControllerProps> = ({
       }
 
       // Insert first round
-      await supabase
+      const { error: roundError } = await supabase
         .from('rounds')
         .insert({
           room_id: room.id,
@@ -408,11 +412,16 @@ export const GameController: React.FC<GameControllerProps> = ({
           started_at: new Date().toISOString()
         });
 
+      if (roundError) {
+        throw roundError;
+      }
+
       // Clear drawing states in presence
       await updatePresence({ isDone: false, isDrawing: false });
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error starting game:', err);
+      alert(`Error starting game: ${err.message || JSON.stringify(err)}`);
     }
   };
 
