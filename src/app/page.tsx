@@ -4,11 +4,11 @@ import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabase';
 import { getOrCreatePlayerId } from '../hooks/useRoomRealtime';
-import { Pencil, Users, Plus, ArrowRight, ArrowLeft, Palette, Sparkles, ChevronRight, Sun, Moon } from 'lucide-react';
+import { Pencil, Users, Plus, ArrowRight, ArrowLeft, Palette, Sparkles, ChevronRight, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { DrawingCanvas, DrawingCanvasRef, LayerConfig } from '../components/DrawingCanvas';
 import { DrawingToolbar } from '../components/DrawingToolbar';
 import { ToolType, BrushType } from '../lib/drawing-utils';
-import { playPop } from '../lib/sound-utils';
+import { playPop, isSoundEnabled, toggleSound } from '../lib/sound-utils';
 import { WaxSeal } from '../components/WaxSeal';
 
 export default function Home() {
@@ -67,6 +67,21 @@ export default function Home() {
     playPop();
     const isDark = document.documentElement.classList.toggle('dark');
     setIsDarkMode(isDark);
+  };
+
+  const [soundOn, setSoundOn] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return isSoundEnabled();
+    }
+    return true;
+  });
+
+  const handleToggleSound = () => {
+    const newVal = toggleSound();
+    setSoundOn(newVal);
+    if (newVal) {
+      playPop();
+    }
   };
 
   // Generate a random 4-letter room code
@@ -279,6 +294,15 @@ export default function Home() {
             >
               {isDarkMode ? <Sun size={12} className="text-amber-500" /> : <Moon size={12} className="text-indigo-400" />}
               <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
+            </button>
+
+            {/* Sound Toggle */}
+            <button
+              onClick={handleToggleSound}
+              className="flex items-center gap-1.5 text-[11px] font-bold text-cozy-fg bg-cozy-card border border-cozy-border px-3.5 py-1.5 rounded-full hover:bg-cozy-accent transition-all active:scale-95 cursor-pointer shadow-xs"
+            >
+              {soundOn ? <Volume2 size={12} className="text-cozy-primary" /> : <VolumeX size={12} className="text-cozy-muted" />}
+              <span>{soundOn ? "Sound On" : "Sound Muted"}</span>
             </button>
           </div>
         </div>

@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { ToolType, BrushType } from '../lib/drawing-utils';
 import { LayerConfig } from './DrawingCanvas';
-import { playPop } from '../lib/sound-utils';
+import { playPop, isSoundEnabled, setSoundEnabled, getSoundVolume, setSoundVolume } from '../lib/sound-utils';
 
 export interface DrawingToolbarProps {
   tool: ToolType;
@@ -164,8 +164,9 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
   setActiveStamp = () => {},
   onClearLayer = () => {},
 }) => {
-  // Toolbar section tabs: 'draw' | 'layers' | 'colors' | 'guides'
   const [activeTab, setActiveTab] = useState<'draw' | 'layers' | 'colors' | 'guides'>('draw');
+  const [soundOnState, setSoundOnState] = useState(() => isSoundEnabled());
+  const [soundVolState, setSoundVolState] = useState(() => getSoundVolume());
 
   // Color Mixer states
   const [colorA, setColorA] = useState('#E05A47');
@@ -887,6 +888,44 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
                 </div>
               )}
 
+            </div>
+
+            {/* Sound Settings */}
+            <div className="flex flex-col gap-2.5 bg-cozy-bg p-3 border border-cozy-border rounded-xl">
+              <span className="text-xs font-semibold text-cozy-fg flex items-center justify-between">
+                <span>Sound & Effects</span>
+                <button
+                  onClick={() => {
+                    const enabled = !isSoundEnabled();
+                    setSoundEnabled(enabled);
+                    setSoundOnState(enabled);
+                    playPop();
+                  }}
+                  className="text-[10px] text-cozy-primary font-bold hover:underline cursor-pointer"
+                >
+                  {soundOnState ? 'Mute' : 'Unmute'}
+                </button>
+              </span>
+
+              <div className="flex flex-col gap-1 text-xs">
+                <div className="flex justify-between text-[10px] text-cozy-muted font-semibold">
+                  <span>Effects Volume</span>
+                  <span>{Math.round(soundVolState * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.0"
+                  max="1.0"
+                  step="0.05"
+                  value={soundVolState}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setSoundVolume(v);
+                    setSoundVolState(v);
+                  }}
+                  className="w-full h-1 bg-cozy-border rounded accent-cozy-primary appearance-none cursor-pointer"
+                />
+              </div>
             </div>
 
           </div>

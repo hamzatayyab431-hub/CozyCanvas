@@ -23,6 +23,7 @@ function getAudioContext(): AudioContext | null {
 }
 
 let soundEnabled = true;
+let soundVolume = 0.5;
 
 // Load initial sound state from localStorage on client side
 if (typeof window !== 'undefined') {
@@ -30,6 +31,10 @@ if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('drawing_duel_sound_enabled');
     if (saved !== null) {
       soundEnabled = saved === 'true';
+    }
+    const savedVol = localStorage.getItem('drawing_duel_sound_volume');
+    if (savedVol !== null) {
+      soundVolume = Number(savedVol);
     }
   } catch (e) {
     console.warn("localStorage not accessible:", e);
@@ -67,6 +72,21 @@ export function setSoundEnabled(enabled: boolean) {
   }
 }
 
+export function getSoundVolume(): number {
+  return soundVolume;
+}
+
+export function setSoundVolume(volume: number) {
+  soundVolume = Math.max(0, Math.min(1, volume));
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('drawing_duel_sound_volume', String(soundVolume));
+    } catch (e) {
+      console.warn("Failed to save volume to localStorage:", e);
+    }
+  }
+}
+
 /**
  * Soft cozy pop sound for button clicks, tool changes, or submitting drawing
  */
@@ -89,7 +109,7 @@ export function playPop() {
   osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
 
   // Volume envelope
-  gain.gain.setValueAtTime(0.2, now);
+  gain.gain.setValueAtTime(0.2 * soundVolume, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
   osc.start(now);
@@ -117,7 +137,7 @@ export function playChime() {
     osc.frequency.setValueAtTime(freq, now + delay);
     
     gain.gain.setValueAtTime(0, now + delay);
-    gain.gain.linearRampToValueAtTime(0.12, now + delay + 0.05);
+    gain.gain.linearRampToValueAtTime(0.12 * soundVolume, now + delay + 0.05);
     gain.gain.exponentialRampToValueAtTime(0.001, now + delay + duration);
     
     osc.start(now + delay);
@@ -165,7 +185,7 @@ export function playFanfare() {
     filter.frequency.exponentialRampToValueAtTime(450, now + start + duration);
 
     gain.gain.setValueAtTime(0, now + start);
-    gain.gain.linearRampToValueAtTime(volume, now + start + 0.04);
+    gain.gain.linearRampToValueAtTime(volume * soundVolume, now + start + 0.04);
     gain.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
 
     osc.start(now + start);
@@ -201,7 +221,7 @@ export function playWarning() {
   osc.type = 'triangle';
   osc.frequency.setValueAtTime(523.25, now); // C5
 
-  gain.gain.setValueAtTime(0.08, now);
+  gain.gain.setValueAtTime(0.08 * soundVolume, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
   osc.start(now);
@@ -230,7 +250,7 @@ export function playSuccess() {
     osc.frequency.setValueAtTime(freq, now + delay);
 
     gain.gain.setValueAtTime(0, now + delay);
-    gain.gain.linearRampToValueAtTime(0.15, now + delay + 0.03);
+    gain.gain.linearRampToValueAtTime(0.15 * soundVolume, now + delay + 0.03);
     gain.gain.exponentialRampToValueAtTime(0.001, now + delay + duration);
 
     osc.start(now + delay);
