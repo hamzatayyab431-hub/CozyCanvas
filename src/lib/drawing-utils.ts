@@ -19,7 +19,7 @@ export type ToolType =
   | 'stamp'
   | 'triangle';
 
-export type BrushType = 'pen' | 'marker' | 'airbrush' | 'pencil';
+export type BrushType = 'pen' | 'marker' | 'airbrush' | 'pencil' | 'calligraphy';
 
 export interface BaseElement {
   id: string;
@@ -243,20 +243,46 @@ export function drawElement(ctx: CanvasRenderingContext2D, element: DrawingEleme
       if (element.points.length === 0) return;
       const brush = element.brushType || 'pen';
 
-      // 1. Airbrush rendering
+      // 1. Airbrush (Spray paint) rendering
       if (brush === 'airbrush') {
         ctx.save();
         ctx.globalAlpha = element.opacity;
-        const rgb = hexToRgb(element.color) || { r: 0, g: 0, b: 0 };
+        ctx.fillStyle = element.color;
+        const density = 25; // Droplet density
         for (const p of element.points) {
-          const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, element.size / 2);
-          grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`);
-          grad.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, element.size / 2, 0, 2 * Math.PI);
-          ctx.fill();
+          // Draw random spray droplets in a radius
+          for (let d = 0; d < density; d++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.pow(Math.random(), 1.5) * (element.size / 2);
+            const sx = p.x + Math.cos(angle) * radius;
+            const sy = p.y + Math.sin(angle) * radius;
+            ctx.fillRect(sx, sy, Math.max(1, element.size * 0.06), Math.max(1, element.size * 0.06));
+          }
         }
+        ctx.restore();
+        return;
+      }
+
+      // Calligraphy rendering (dynamic thinning based on speed/pressure)
+      if (brush === 'calligraphy') {
+        const strokePoints = getStroke(element.points, {
+          size: element.size,
+          thinning: 0.75,
+          smoothing: 0.4,
+          streamline: 0.4,
+          simulatePressure: true,
+        });
+        if (strokePoints.length === 0) return;
+        ctx.save();
+        ctx.globalAlpha = element.opacity;
+        ctx.fillStyle = element.color;
+        ctx.beginPath();
+        ctx.moveTo(strokePoints[0][0], strokePoints[0][1]);
+        for (let i = 1; i < strokePoints.length; i++) {
+          ctx.lineTo(strokePoints[i][0], strokePoints[i][1]);
+        }
+        ctx.closePath();
+        ctx.fill();
         ctx.restore();
         return;
       }

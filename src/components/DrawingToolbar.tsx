@@ -255,6 +255,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
     { type: 'marker', label: 'Marker' },
     { type: 'airbrush', label: 'Airbrush' },
     { type: 'pencil', label: 'Pencil' },
+    { type: 'calligraphy', label: 'Calligraphy' },
   ];
 
   // Mixed Color calculations for mixer preview swatch
@@ -390,6 +391,32 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
                         {emoji}
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Live Brush Stroke Preview */}
+              {tool !== 'select' && tool !== 'eyedropper' && (
+                <div className="flex flex-col gap-1.5 pt-1.5 border-t border-cozy-border/50">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-cozy-muted">Brush Preview</span>
+                  <div className="w-full h-10 bg-cozy-card rounded-lg border border-cozy-border flex items-center justify-center overflow-hidden relative shadow-inner">
+                    <div
+                      className="rounded-full transition-all duration-75"
+                      style={{
+                        backgroundColor: tool === 'eraser' ? '#cbd5e1' : color,
+                        width: `${Math.min(36, Math.max(2, size))}px`,
+                        height: `${Math.min(36, Math.max(2, size))}px`,
+                        opacity: tool === 'eraser' ? 1.0 : opacity,
+                      }}
+                    />
+                    {tool === 'eraser' && (
+                      <span className="absolute text-[8px] font-bold text-slate-500 uppercase tracking-widest pointer-events-none">Eraser</span>
+                    )}
+                    {tool === 'stamp' && (
+                      <span className="absolute text-2xl select-none pointer-events-none" style={{ opacity }}>
+                        {activeStamp}
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
