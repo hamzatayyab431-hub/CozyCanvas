@@ -33,6 +33,7 @@ interface RoomSettings {
   maxRounds: number;
   roundDuration: number; // in seconds, 0 = untimed
   category: string; // 'animals', 'objects', etc.
+  customPrompts?: string[];
 }
 
 interface Round {
@@ -112,6 +113,15 @@ export const GameController: React.FC<GameControllerProps> = ({
   const [maxRounds, setMaxRounds] = useState<number>(room.settings?.maxRounds || 3);
   const [roundDuration, setRoundDuration] = useState<number>(room.settings?.roundDuration || 60);
   const [category, setCategory] = useState<string>(room.settings?.category || 'all');
+  const [customPromptsText, setCustomPromptsText] = useState<string>(() => {
+    return room.settings?.customPrompts?.join('\n') || '';
+  });
+
+  useEffect(() => {
+    if (room.settings?.customPrompts) {
+      setCustomPromptsText(room.settings.customPrompts.join('\n'));
+    }
+  }, [room.settings?.customPrompts]);
 
 
 
@@ -339,14 +349,17 @@ export const GameController: React.FC<GameControllerProps> = ({
   }, [currentRound, hasSubmitted, isSubmitting, handleAutoSubmit]);
 
   // Host action to update settings
-  const handleSaveSettings = async () => {
+  const handleSaveSettings = async (overrideCategory?: string, overrideCustomPrompts?: string[]) => {
     if (!isHost) return;
+
+    const cat = overrideCategory !== undefined ? overrideCategory : category;
+    const promptsText = overrideCustomPrompts !== undefined ? overrideCustomPrompts : customPromptsText.split('\n').map(p => p.trim()).filter(Boolean);
 
     try {
       await supabase
         .from('rooms')
         .update({
-          settings: { maxRounds, roundDuration, category }
+          settings: { maxRounds, roundDuration, category: cat, customPrompts: promptsText }
         })
         .eq('id', room.id);
     } catch (err) {
@@ -359,17 +372,24 @@ export const GameController: React.FC<GameControllerProps> = ({
     if (!isHost) return;
 
     try {
+      const promptsArr = customPromptsText.split('\n').map(p => p.trim()).filter(Boolean);
       // Update room status
       await supabase
         .from('rooms')
         .update({
           status: 'playing',
-          settings: { maxRounds, roundDuration, category }
+          settings: { maxRounds, roundDuration, category, customPrompts: promptsArr }
         })
         .eq('id', room.id);
 
       // Select random prompt
-      const { prompt } = getRandomPrompt(category);
+      let prompt = '';
+      if (category === 'custom' && promptsArr.length > 0) {
+        prompt = promptsArr[Math.floor(Math.random() * promptsArr.length)];
+      } else {
+        const res = getRandomPrompt(category === 'custom' ? 'all' : category);
+        prompt = res.prompt;
+      }
 
       // Insert first round
       await supabase
@@ -477,7 +497,14 @@ export const GameController: React.FC<GameControllerProps> = ({
         confetti({ particleCount: 150, spread: 80 });
       } else {
         // Pick new random prompt
-        const { prompt } = getRandomPrompt(room.settings.category);
+        let prompt = '';
+        const customPrompts = room.settings.customPrompts || [];
+        if (room.settings.category === 'custom' && customPrompts.length > 0) {
+          prompt = customPrompts[Math.floor(Math.random() * customPrompts.length)];
+        } else {
+          const res = getRandomPrompt(room.settings.category === 'custom' ? 'all' : room.settings.category);
+          prompt = res.prompt;
+        }
 
         // Reset presence done states
         // In actual app, each client resets their own, but host updates db
@@ -614,7 +641,7 @@ export const GameController: React.FC<GameControllerProps> = ({
                 {isHost ? (
                   <select
                     value={category}
-                    onChange={(e) => { setCategory(e.target.value); handleSaveSettings(); playPop(); }}
+                    onChange={(e) => { setCategory(e.target.value); handleSaveSettings(e.target.value); playPop(); }}
                     className="w-full text-sm p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg outline-none focus:ring-2 focus:ring-cozy-primary/20 focus:border-cozy-primary transition-all"
                   >
                     <option value="all">🎲 All Categories Combined</option>
@@ -623,16 +650,19 @@ export const GameController: React.FC<GameControllerProps> = ({
                         {c.name}
                       </option>
                     ))}
+                    <option value="custom">✍️ Custom Prompts...</option>
                   </select>
                 ) : (
                   <div className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg text-sm font-semibold flex items-center gap-2">
                     {category === 'all'
                       ? '🎲 All Categories'
-                      : promptCategories.find((c) => c.id === category)?.name || 'Default'}
+                      : category === 'custom'
+                        ? '✍️ Custom Prompts'
+                        : promptCategories.find((c) => c.id === category)?.name || 'Default'}
                   </div>
                 )}
               </div>
-
+ 
               {/* Round Duration */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-cozy-fg">Timer Duration</label>
@@ -655,7 +685,7 @@ export const GameController: React.FC<GameControllerProps> = ({
                   </div>
                 )}
               </div>
-
+ 
               {/* Max Rounds */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-cozy-fg">Total Rounds</label>
@@ -678,6 +708,31 @@ export const GameController: React.FC<GameControllerProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Custom Prompts Text Area */}
+            {category === 'custom' && (
+              <div className="flex flex-col gap-1.5 mt-2 border-t border-cozy-border/50 pt-4">
+                <label className="text-xs font-bold text-cozy-fg">
+                  Custom Prompts (one per line)
+                </label>
+                {isHost ? (
+                  <textarea
+                    rows={4}
+                    placeholder="e.g. Draw us cooking together&#10;A cute teddy bear with a jetpack&#10;Our dream house in the forest"
+                    value={customPromptsText}
+                    onChange={(e) => setCustomPromptsText(e.target.value)}
+                    onBlur={(e) => handleSaveSettings(category, e.target.value.split('\n').map(p => p.trim()).filter(Boolean))}
+                    className="w-full text-xs p-3 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg outline-none focus:ring-2 focus:ring-cozy-primary/20 focus:border-cozy-primary transition-all font-sans"
+                  />
+                ) : (
+                  <div className="p-3 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg text-xs max-h-24 overflow-y-auto whitespace-pre-line font-medium italic">
+                    {room.settings?.customPrompts && room.settings.customPrompts.length > 0 
+                      ? room.settings.customPrompts.join('\n') 
+                      : 'No custom prompts added yet.'}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Connected players counter */}
