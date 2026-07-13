@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Heart, Star, Crown, History, Image as ImageIcon, Sparkles } from 'lucide-react';
 
 export interface GalleryDrawing {
@@ -25,36 +25,8 @@ interface GalleryProps {
 }
 
 export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) => {
-  // Only show drawings that belong to completed rounds (or rounds in reveal/completed status)
-  // Group drawings by round
-  const roundsMap: Record<string, {
-    roundNumber: number;
-    prompt: string;
-    drawings: GalleryDrawing[];
-  }> = {};
-
-  drawings.forEach((drawing) => {
-    // If round information is loaded, use it
-    if (drawing.round) {
-      const roundId = drawing.round_id;
-      if (!roundsMap[roundId]) {
-        roundsMap[roundId] = {
-          roundNumber: drawing.round?.round_number || 0,
-          prompt: drawing.round?.prompt || 'Unknown Prompt',
-          drawings: [],
-        };
-      }
-      roundsMap[roundId].drawings.push(drawing);
-    }
-  });
-
-  // Sort rounds by round number descending (newest on top)
-  const sortedRounds = Object.entries(roundsMap)
-    .sort((a, b) => b[1].roundNumber - a[1].roundNumber)
-    .map(([roundId, data]) => ({
-      roundId,
-      ...data,
-    }));
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'mine' | 'partners' | 'highly_rated'>('all');
 
   // Parse reactions from canvas_data (which can store reactions: Record<string, string>)
   const getReactionCounts = (drawing: GalleryDrawing) => {
@@ -74,7 +46,60 @@ export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) =
     return reactions;
   };
 
-  if (sortedRounds.length === 0) {
+  const filteredDrawings = drawings.filter((drawing) => {
+    // Search query matching
+    const promptText = drawing.round?.prompt || '';
+    const playerName = drawing.player_name || '';
+    const matchesSearch =
+      promptText.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      playerName.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    // Filter tab matching
+    if (activeFilter === 'mine') {
+      return drawing.player_id === currentPlayerId;
+    }
+    if (activeFilter === 'partners') {
+      return drawing.player_id !== currentPlayerId;
+    }
+    if (activeFilter === 'highly_rated') {
+      const rx = getReactionCounts(drawing);
+      return rx.heart > 0 || rx.star > 0 || rx.crown > 0;
+    }
+    return true;
+  });
+
+  // Group drawings by round
+  const roundsMap: Record<string, {
+    roundNumber: number;
+    prompt: string;
+    drawings: GalleryDrawing[];
+  }> = {};
+
+  filteredDrawings.forEach((drawing) => {
+    // If round information is loaded, use it
+    if (drawing.round) {
+      const roundId = drawing.round_id;
+      if (!roundsMap[roundId]) {
+        roundsMap[roundId] = {
+          roundNumber: drawing.round?.round_number || 0,
+          prompt: drawing.round?.prompt || 'Unknown Prompt',
+          drawings: [],
+        };
+      }
+      roundsMap[roundId].drawings.push(drawing);
+    }
+  });
+
+  const sortedRounds = Object.entries(roundsMap)
+    .sort((a, b) => b[1].roundNumber - a[1].roundNumber)
+    .map(([roundId, data]) => ({
+      roundId,
+      ...data,
+    }));
+
+  if (drawings.length === 0) {
     return (
       <div className="bg-cozy-card border border-cozy-border p-6 rounded-2xl shadow-lg shadow-stone-200/5 flex flex-col items-center justify-center text-center gap-3 py-12">
         <div className="p-4 bg-cozy-bg rounded-full border border-cozy-border text-cozy-muted">
@@ -92,13 +117,61 @@ export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) =
 
   return (
     <div className="bg-cozy-card border border-cozy-border p-5 rounded-2xl shadow-[0_4px_12px_rgba(232,180,184,0.15)] flex flex-col gap-5 select-none">
-      <h3 className="text-sm font-serif font-bold uppercase tracking-wider text-cozy-muted flex items-center gap-2 border-b border-cozy-border pb-3">
-        <Sparkles size={16} className="text-cozy-primary" />
-        Exhibition Gallery
-      </h3>
+      <div className="flex items-center justify-between border-b border-cozy-border pb-3">
+        <h3 className="text-sm font-serif font-bold uppercase tracking-wider text-cozy-muted flex items-center gap-2">
+          <Sparkles size={16} className="text-cozy-primary" />
+          Exhibition Gallery
+        </h3>
+        <span className="text-[9.5px] font-bold text-cozy-primary bg-cozy-primary/10 px-2 py-0.5 rounded-full">
+          {drawings.length} total
+        </span>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col gap-3 border-b border-cozy-border pb-4">
+        <input
+          type="text"
+          placeholder="🔍 Search drawings by prompt or player..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full text-xs p-2.5 rounded-xl border border-cozy-border bg-cozy-bg text-cozy-fg outline-none focus:ring-2 focus:ring-cozy-primary/20 focus:border-cozy-primary transition-all font-medium placeholder-cozy-muted/60"
+        />
+
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          {([
+            { id: 'all', label: '🖼️ All' },
+            { id: 'mine', label: '👤 Mine' },
+            { id: 'partners', label: '🤝 Partner\'s' },
+            { id: 'highly_rated', label: '👑 Highly Rated' },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-xl border text-[10px] font-bold whitespace-nowrap transition-all active:scale-95 cursor-pointer ${
+                activeFilter === tab.id
+                  ? 'bg-cozy-primary text-white border-cozy-primary shadow-xs'
+                  : 'bg-cozy-bg text-cozy-fg border-cozy-border hover:bg-cozy-border'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="flex flex-col gap-6 max-h-[600px] overflow-y-auto pr-1">
-        {sortedRounds.map((round) => (
+        {sortedRounds.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center gap-2">
+            <span className="text-xs font-bold text-cozy-muted">No drawings match your filters</span>
+            <button
+              onClick={() => { setSearchQuery(''); setActiveFilter('all'); }}
+              className="text-[10px] text-cozy-primary hover:underline font-bold"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          sortedRounds.map((round) => (
           <div key={round.roundId} className="flex flex-col gap-3 border-b border-cozy-border pb-5 last:border-0 last:pb-0">
             <div className="flex flex-col gap-0.5">
               <span className="text-[10px] font-serif font-bold text-white bg-cozy-primary px-2 py-0.5 rounded-sm w-fit">
@@ -181,7 +254,8 @@ export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) =
               })}
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
