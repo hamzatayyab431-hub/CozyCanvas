@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { DrawingCanvas, DrawingCanvasRef } from './DrawingCanvas';
+import { DrawingCanvas, DrawingCanvasRef, LayerConfig } from './DrawingCanvas';
 import { DrawingToolbar } from './DrawingToolbar';
 import { RoomPresence } from './RoomPresence';
 import { Gallery, GalleryDrawing } from './Gallery';
 import { PlayerPresence } from '../hooks/useRoomRealtime';
 import { promptCategories, getRandomPrompt } from '../lib/prompts';
-import { ToolType } from '../lib/drawing-utils';
+import { ToolType, BrushType } from '../lib/drawing-utils';
 import {
   Play,
   Clock,
@@ -80,6 +80,24 @@ export const GameController: React.FC<GameControllerProps> = ({
   const [fillShape, setFillShape] = useState<boolean>(false);
   const [canUndo, setCanUndo] = useState<boolean>(false);
   const [canRedo, setCanRedo] = useState<boolean>(false);
+
+  // Advanced drawing states
+  const [brushType, setBrushType] = useState<BrushType>('pen');
+  const [activeLayerId, setActiveLayerId] = useState<'background' | 'sketch' | 'details'>('sketch');
+  const [layers, setLayers] = useState<LayerConfig[]>([
+    { id: 'background', name: 'Background Layer', visible: true, opacity: 1.0, locked: false },
+    { id: 'sketch', name: 'Sketch Layer', visible: true, opacity: 1.0, locked: false },
+    { id: 'details', name: 'Details Layer', visible: true, opacity: 1.0, locked: false },
+  ]);
+  const [symmetryMode, setSymmetryMode] = useState<'none' | 'vertical' | 'horizontal' | 'both'>('none');
+  const [gridVisible, setGridVisible] = useState<boolean>(false);
+  const [gridSize, setGridSize] = useState<number>(40);
+  const [refImage, setRefImage] = useState<File | null>(null);
+  const [refScale, setRefScale] = useState<number>(1.0);
+  const [refX, setRefX] = useState<number>(0);
+  const [refY, setRefY] = useState<number>(0);
+  const [refOpacity, setRefOpacity] = useState<number>(0.3);
+  const [activeStamp, setActiveStamp] = useState<string>('❤️');
 
   // Canvas Reference
   const canvasRef = useRef<DrawingCanvasRef>(null);
@@ -858,6 +876,22 @@ export const GameController: React.FC<GameControllerProps> = ({
                     // Sync drawing status with other player
                     updatePresence({ isDrawing: true });
                   }}
+                  brushType={brushType}
+                  activeLayerId={activeLayerId}
+                  layers={layers}
+                  symmetryMode={symmetryMode}
+                  gridVisible={gridVisible}
+                  gridSize={gridSize}
+                  refImage={refImage}
+                  refScale={refScale}
+                  refX={refX}
+                  refY={refY}
+                  refOpacity={refOpacity}
+                  activeStamp={activeStamp}
+                  onRefImageChange={(x, y) => {
+                    setRefX(x);
+                    setRefY(y);
+                  }}
                 />
               </div>
 
@@ -884,6 +918,31 @@ export const GameController: React.FC<GameControllerProps> = ({
                 onZoomOut={() => canvasRef.current?.zoomOut()}
                 onResetZoom={() => canvasRef.current?.resetZoomPan()}
                 onExport={submitDrawing}
+                brushType={brushType}
+                setBrushType={setBrushType}
+                activeLayerId={activeLayerId}
+                setActiveLayerId={setActiveLayerId}
+                layers={layers}
+                setLayers={setLayers}
+                symmetryMode={symmetryMode}
+                setSymmetryMode={setSymmetryMode}
+                gridVisible={gridVisible}
+                setGridVisible={setGridVisible}
+                gridSize={gridSize}
+                setGridSize={setGridSize}
+                refImage={refImage}
+                setRefImage={setRefImage}
+                refScale={refScale}
+                setRefScale={setRefScale}
+                refX={refX}
+                setRefX={setRefX}
+                refY={refY}
+                setRefY={setRefY}
+                refOpacity={refOpacity}
+                setRefOpacity={setRefOpacity}
+                activeStamp={activeStamp}
+                setActiveStamp={setActiveStamp}
+                onClearLayer={(layerId) => canvasRef.current?.clearLayer(layerId)}
               />
             </div>
           ) : (

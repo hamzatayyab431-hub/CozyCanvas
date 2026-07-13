@@ -63,6 +63,7 @@ export interface DrawingCanvasProps {
   refOpacity?: number;
   activeStamp?: string;
   onColorSelect?: (color: string) => void;
+  onRefImageChange?: (x: number, y: number) => void;
 }
 
 const VIRTUAL_WIDTH = 1600;
@@ -121,6 +122,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   refOpacity = 0.3,
   activeStamp = '❤️',
   onColorSelect,
+  onRefImageChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -174,6 +176,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   const isDraggingSelection = useRef(false);
   const selectionDragStart = useRef({ x: 0, y: 0 });
+
+  const isDraggingRefImage = useRef(false);
+  const refDragStart = useRef({ x: 0, y: 0 });
+  const refImageStartPos = useRef({ x: 0, y: 0 });
 
   // Touch tracking for pinch-to-zoom
   const activeTouches = useRef<{ [id: number]: { x: number; y: number } }>({});
@@ -771,6 +777,15 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       return;
     }
 
+    // Handle Shift + drag to reposition reference image
+    if (e.shiftKey && refImage) {
+      isDraggingRefImage.current = true;
+      refDragStart.current = { x: e.clientX, y: e.clientY };
+      refImageStartPos.current = { x: refX, y: refY };
+      canvas.style.cursor = 'move';
+      return;
+    }
+
     // Touch pinch trackers
     activeTouches.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     const touchIds = Object.keys(activeTouches.current).map(Number);
@@ -999,6 +1014,18 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const virtualX = (screenX - pan.x) / zoom;
     const virtualY = (screenY - pan.y) / zoom;
 
+    // Reference image drag repositioning
+    if (isDraggingRefImage.current && refImage) {
+      const dx = (e.clientX - refDragStart.current.x) / zoom;
+      const dy = (e.clientY - refDragStart.current.y) / zoom;
+      const nextX = Math.round(refImageStartPos.current.x + dx);
+      const nextY = Math.round(refImageStartPos.current.y + dy);
+      if (onRefImageChange) {
+        onRefImageChange(nextX, nextY);
+      }
+      return;
+    }
+
     // Eyedropper drag sampling
     if (tool === 'eyedropper' && isDrawing.current) {
       sampleColorAt(virtualX, virtualY);
@@ -1075,6 +1102,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
 
     delete activeTouches.current[e.pointerId];
+
+    if (isDraggingRefImage.current) {
+      isDraggingRefImage.current = false;
+      if (canvas) {
+        canvas.style.cursor = 'default';
+      }
+      return;
+    }
 
     if (isPanning) {
       setIsPanning(false);

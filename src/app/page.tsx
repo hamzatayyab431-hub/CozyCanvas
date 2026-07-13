@@ -399,6 +399,10 @@ export default function Home() {
           refOpacity={refOpacity}
           activeStamp={activeStamp}
           onColorSelect={setColor}
+          onRefImageChange={(x, y) => {
+            setRefX(x);
+            setRefY(y);
+          }}
         />
       </main>
     </div>
