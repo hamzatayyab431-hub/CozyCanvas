@@ -115,13 +115,13 @@ export default function Home() {
 
       if (error) {
         console.error('Error creating room:', error);
-        alert('Failed to create room. Please try again.');
+        alert(`Failed to create room: ${error.message}`);
       } else {
         router.push(`/room/${code}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Unexpected error creating room:', err);
-      alert('An error occurred. Please verify your connection.');
+      alert(`An error occurred: ${err.message || 'Please verify your connection.'}`);
     } finally {
       setIsCreating(false);
     }
