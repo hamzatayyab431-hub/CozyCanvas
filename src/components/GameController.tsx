@@ -198,7 +198,7 @@ export const GameController: React.FC<GameControllerProps> = ({
   // Audio transitions for rounds
   const lastRoundState = useRef<{ id: string; status: string } | null>(null);
   useEffect(() => {
-    if (!currentRound) {
+    if (room.status === 'waiting' || !currentRound) {
       lastRoundState.current = null;
       return;
     }
@@ -219,7 +219,7 @@ export const GameController: React.FC<GameControllerProps> = ({
     if (currentRound.status === 'reveal' && prev.status !== 'reveal') {
       playFanfare();
     }
-  }, [currentRound]);
+  }, [room.status, currentRound]);
 
   // Audio transitions for room finished
   const lastRoomStatus = useRef<string | null>(null);
@@ -248,10 +248,15 @@ export const GameController: React.FC<GameControllerProps> = ({
   const submitDrawing = useCallback(async () => {
     if (!currentRound || hasSubmitted || isSubmitting) return;
 
+    if (!canvasRef.current) {
+      console.warn('Canvas reference is not available yet.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // Get base64 PNG from canvas
-      const pngData = canvasRef.current?.exportPNG('#ffffff') || '';
+      const pngData = canvasRef.current.exportPNG('#ffffff') || '';
       if (!pngData) {
         throw new Error('Could not export drawing.');
       }
@@ -322,7 +327,7 @@ export const GameController: React.FC<GameControllerProps> = ({
 
   // Manage Timer countdown
   useEffect(() => {
-    if (!currentRound || currentRound.status !== 'drawing' || currentRound.duration_seconds === 0) {
+    if (room.status === 'waiting' || !currentRound || currentRound.status !== 'drawing' || currentRound.duration_seconds === 0) {
       Promise.resolve().then(() => {
         setTimeLeft(null);
       });
@@ -346,7 +351,7 @@ export const GameController: React.FC<GameControllerProps> = ({
     const interval = setInterval(calculateTimeLeft, 1000);
 
     return () => clearInterval(interval);
-  }, [currentRound, hasSubmitted, isSubmitting, handleAutoSubmit]);
+  }, [room.status, currentRound, hasSubmitted, isSubmitting, handleAutoSubmit]);
 
   // Host action to update settings
   const handleSaveSettings = async (overrideCategory?: string, overrideCustomPrompts?: string[]) => {
