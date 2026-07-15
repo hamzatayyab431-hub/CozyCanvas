@@ -628,6 +628,16 @@ export const GameController: React.FC<GameControllerProps> = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  const [isCopied, setIsCopied] = useState(false);
+  const handleCopyLink = () => {
+    if (typeof window !== 'undefined') {
+      navigator.clipboard.writeText(window.location.href);
+      setIsCopied(true);
+      playPop();
+      setTimeout(() => setIsCopied(false), 2000);
+    }
+  };
+
   // ==========================================
   // RENDER: WAITING LOBBY
   // ==========================================
@@ -638,9 +648,18 @@ export const GameController: React.FC<GameControllerProps> = ({
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-cozy-primary" />
           
           <div className="flex flex-col gap-2">
-            <span className="text-[11px] font-serif font-extrabold uppercase tracking-wider text-cozy-primary bg-cozy-secondary/30 px-3 py-1 rounded-sm w-fit mx-auto">
-              Lobby Code: {room.code}
-            </span>
+            <div className="flex items-center justify-center gap-2 mx-auto">
+              <span className="text-[11px] font-serif font-extrabold uppercase tracking-wider text-cozy-primary bg-cozy-secondary/30 px-3 py-1.5 rounded-sm">
+                Lobby Code: {room.code}
+              </span>
+              <button
+                onClick={handleCopyLink}
+                className="text-[11px] font-serif font-extrabold uppercase tracking-wider text-cozy-bg bg-cozy-primary hover:bg-cozy-primary/90 px-3 py-1.5 rounded-sm transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Copy Room Link"
+              >
+                {isCopied ? 'Copied!' : 'Copy Link'}
+              </button>
+            </div>
             <h1 className="text-3xl font-serif font-black text-cozy-fg tracking-tight mt-2 flex items-center justify-center gap-2">
               <WaxSeal size={32} motif="heart" className="text-cozy-primary animate-cozy-float" />
               Cozy Canvas Duel
