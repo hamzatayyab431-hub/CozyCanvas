@@ -199,7 +199,7 @@ export default function Home() {
 
         <div className="max-w-4xl w-full flex flex-col gap-8 items-center text-center relative z-10">
           {/* Header Title */}
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-center gap-3 animate-fade-in-up">
             <div className="flex items-center gap-3 mb-2">
               <WaxSeal className="text-cozy-primary animate-cozy-float" size={56} motif="heart" />
               <h1 className="text-4xl md:text-5xl font-serif font-black text-cozy-fg tracking-wide mt-2">
@@ -212,7 +212,7 @@ export default function Home() {
           </div>
 
           {/* Action Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl mt-4 animate-fade-in-up delay-100">
             
             {/* Multiplayer Card */}
             <div className="bg-cozy-card border border-cozy-border p-6 rounded-3xl shadow-xl shadow-stone-200/10 flex flex-col justify-between text-left gap-6 transition-all hover:shadow-2xl cozy-interactive">

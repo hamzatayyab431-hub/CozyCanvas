@@ -24,10 +24,12 @@ import {
   RotateCcw,
   ArrowRight,
   ChevronRight,
-  Smile
+  Smile,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { playPop, playChime, playFanfare, playWarning } from '../lib/sound-utils';
+import { playPop, playChime, playFanfare, playWarning, isSoundEnabled, toggleSound } from '../lib/sound-utils';
 import { WaxSeal } from './WaxSeal';
 
 interface RoomSettings {
@@ -125,6 +127,21 @@ export const GameController: React.FC<GameControllerProps> = ({
   const [customPromptsText, setCustomPromptsText] = useState<string>(() => {
     return room.settings?.customPrompts?.join('\n') || '';
   });
+
+  const [soundOn, setSoundOn] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return isSoundEnabled();
+    }
+    return true;
+  });
+
+  const handleToggleSound = () => {
+    const newVal = toggleSound();
+    setSoundOn(newVal);
+    if (newVal) {
+      playPop();
+    }
+  };
 
   useEffect(() => {
     if (room.settings?.customPrompts) {
@@ -644,7 +661,7 @@ export const GameController: React.FC<GameControllerProps> = ({
   if (room.status === 'waiting') {
     return (
       <div className="max-w-4xl mx-auto flex flex-col gap-6 p-4 select-none">
-        <div className="bg-cozy-card border-2 border-cozy-secondary p-8 rounded-3xl shadow-lg shadow-stone-200/5 text-center flex flex-col gap-6 relative overflow-hidden">
+        <div className="bg-cozy-card border-2 border-cozy-secondary p-8 rounded-3xl shadow-lg shadow-stone-200/5 text-center flex flex-col gap-6 relative overflow-hidden animate-fade-in-up">
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-cozy-primary" />
           
           <div className="flex flex-col gap-2">

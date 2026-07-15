@@ -202,7 +202,7 @@ export default function RoomPage({ params }: PageProps) {
   if (!nicknameConfirmed) {
     return (
       <div className="min-h-screen bg-cozy-bg flex items-center justify-center p-4">
-        <div className="bg-cozy-card border border-cozy-border max-w-md w-full p-8 rounded-3xl shadow-xl shadow-stone-200/5 flex flex-col gap-6 relative overflow-hidden">
+        <div className="bg-cozy-card border border-cozy-border max-w-md w-full p-8 rounded-3xl shadow-xl shadow-stone-200/5 flex flex-col gap-6 relative overflow-hidden animate-fade-in-up">
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-linear-to-r from-orange-400 to-amber-400" />
           
           <div className="flex flex-col gap-2 text-center">
