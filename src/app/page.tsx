@@ -10,6 +10,7 @@ import { DrawingToolbar } from '../components/DrawingToolbar';
 import { ToolType, BrushType } from '../lib/drawing-utils';
 import { playPop, isSoundEnabled, toggleSound } from '../lib/sound-utils';
 import { WaxSeal } from '../components/WaxSeal';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 export default function Home() {
   const router = useRouter();
@@ -154,6 +155,14 @@ export default function Home() {
       setIsJoining(false);
     }
   };
+
+  // Keyboard Shortcuts
+  useKeyboardShortcuts({
+    setTool,
+    onUndo: () => canvasRef.current?.undo(),
+    onRedo: () => canvasRef.current?.redo(),
+    onClear: () => canvasRef.current?.clear(),
+  });
 
   // Handle Sandbox PNG export
   const handleExport = () => {

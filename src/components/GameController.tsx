@@ -9,6 +9,7 @@ import { Gallery, GalleryDrawing } from './Gallery';
 import { PlayerPresence } from '../hooks/useRoomRealtime';
 import { promptCategories, getRandomPrompt } from '../lib/prompts';
 import { ToolType, BrushType } from '../lib/drawing-utils';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import {
   Play,
   Clock,
@@ -102,6 +103,14 @@ export const GameController: React.FC<GameControllerProps> = ({
 
   // Canvas Reference
   const canvasRef = useRef<DrawingCanvasRef>(null);
+
+  // Keyboard Shortcuts
+  useKeyboardShortcuts({
+    setTool,
+    onUndo: () => canvasRef.current?.undo(),
+    onRedo: () => canvasRef.current?.redo(),
+    onClear: () => canvasRef.current?.clear(),
+  });
 
   // Game/Round State
   const [rounds, setRounds] = useState<Round[]>([]);
