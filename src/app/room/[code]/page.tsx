@@ -6,7 +6,7 @@ import { supabase } from '../../../lib/supabase';
 import { useRoomRealtime, getOrCreatePlayerId } from '../../../hooks/useRoomRealtime';
 import { GameController } from '../../../components/GameController';
 import { Loader2, Palette, Sparkles, ArrowLeft, Paintbrush, ShieldAlert, Volume2, VolumeX } from 'lucide-react';
-import { isSoundEnabled, toggleSound, playPop } from '../../../lib/sound-utils';
+import { isSoundEnabled, toggleSound, playPop, getSoundVolume, setSoundVolume } from '../../../lib/sound-utils';
 import { WaxSeal } from '../../../components/WaxSeal';
 
 interface PageProps {
@@ -44,12 +44,25 @@ export default function RoomPage({ params }: PageProps) {
     return true;
   });
 
+  const [volume, setVolume] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      return getSoundVolume();
+    }
+    return 0.5;
+  });
+
   const handleToggleSound = () => {
     const newVal = toggleSound();
     setSoundOn(newVal);
     if (newVal) {
       playPop();
     }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVol = parseFloat(e.target.value);
+    setVolume(newVol);
+    setSoundVolume(newVol);
   };
 
   // Nickname entry state
@@ -251,15 +264,31 @@ export default function RoomPage({ params }: PageProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Sound Toggle Button */}
-          <button
-            onClick={handleToggleSound}
-            className="flex items-center justify-center p-2 border border-cozy-secondary hover:bg-cozy-secondary/15 text-cozy-primary rounded-xl transition-all active:scale-95 cursor-pointer"
-            title={soundOn ? "Mute Sounds" : "Unmute Sounds"}
-          >
-            {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
-          </button>
+        <div className="flex items-center gap-3">
+          {/* Audio Controls */}
+          <div className="flex items-center gap-2 bg-cozy-bg border border-cozy-secondary/50 rounded-xl px-3 py-1.5 shadow-inner">
+            <button
+              onClick={handleToggleSound}
+              className="text-cozy-primary hover:text-cozy-primary-hover transition-colors active:scale-95"
+              title={soundOn ? "Mute Sounds" : "Unmute Sounds"}
+            >
+              {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+            
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={soundOn ? volume : 0}
+              onChange={handleVolumeChange}
+              disabled={!soundOn}
+              className={`w-16 h-1.5 rounded-full appearance-none bg-cozy-secondary/30 outline-none transition-opacity ${!soundOn ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              style={{
+                background: `linear-gradient(to right, var(--color-cozy-primary) ${(soundOn ? volume : 0) * 100}%, transparent ${(soundOn ? volume : 0) * 100}%)`,
+              }}
+            />
+          </div>
 
           <button
             onClick={handleLeaveRoom}
