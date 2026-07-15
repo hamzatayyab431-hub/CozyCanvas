@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Heart, Star, Crown, History, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Heart, Star, Crown, History, Image as ImageIcon, Sparkles, Download } from 'lucide-react';
 
 export interface GalleryDrawing {
   id: string;
@@ -115,6 +115,16 @@ export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) =
     );
   }
 
+  const handleDownload = (drawing: GalleryDrawing) => {
+    if (!drawing.image_url) return;
+    const a = document.createElement('a');
+    a.href = drawing.image_url;
+    a.download = `cozy-canvas-${drawing.player_name}-${drawing.id.slice(0, 6)}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   return (
     <div className="bg-cozy-card border border-cozy-border p-5 rounded-2xl shadow-[0_4px_12px_rgba(232,180,184,0.15)] flex flex-col gap-5 select-none">
       <div className="flex items-center justify-between border-b border-cozy-border pb-3">
@@ -222,30 +232,42 @@ export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) =
                         )}
                       </div>
 
-                      {/* Display reaction badges */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {reactions.heart > 0 && (
-                          <div className="flex items-center gap-0.5 bg-transparent border border-cozy-primary text-cozy-primary px-1.5 py-0.5 rounded-sm text-[9px] font-bold">
-                            <Heart size={9} className="fill-cozy-primary stroke-cozy-primary" />
-                            <span>{reactions.heart}</span>
-                          </div>
-                        )}
-                        {reactions.star > 0 && (
-                          <div className="flex items-center gap-0.5 bg-transparent border border-cozy-primary text-cozy-primary px-1.5 py-0.5 rounded-sm text-[9px] font-bold">
-                            <Star size={9} className="fill-cozy-primary stroke-cozy-primary" />
-                            <span>{reactions.star}</span>
-                          </div>
-                        )}
-                        {reactions.crown > 0 && (
-                          <div className="flex items-center gap-0.5 bg-transparent border border-cozy-primary text-cozy-primary px-1.5 py-0.5 rounded-sm text-[9px] font-bold">
-                            <Crown size={9} className="fill-cozy-primary stroke-cozy-primary" />
-                            <span>{reactions.crown}</span>
-                          </div>
-                        )}
-                        {reactions.heart === 0 && reactions.star === 0 && reactions.crown === 0 && (
-                          <span className="text-[9px] font-medium text-cozy-muted/60 italic">
-                            Unrated
-                          </span>
+                      {/* Display reaction badges and download button */}
+                      <div className="flex items-center justify-between w-full mt-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {reactions.heart > 0 && (
+                            <div className="flex items-center gap-0.5 bg-transparent border border-cozy-primary text-cozy-primary px-1.5 py-0.5 rounded-sm text-[9px] font-bold">
+                              <Heart size={9} className="fill-cozy-primary stroke-cozy-primary" />
+                              <span>{reactions.heart}</span>
+                            </div>
+                          )}
+                          {reactions.star > 0 && (
+                            <div className="flex items-center gap-0.5 bg-transparent border border-cozy-primary text-cozy-primary px-1.5 py-0.5 rounded-sm text-[9px] font-bold">
+                              <Star size={9} className="fill-cozy-primary stroke-cozy-primary" />
+                              <span>{reactions.star}</span>
+                            </div>
+                          )}
+                          {reactions.crown > 0 && (
+                            <div className="flex items-center gap-0.5 bg-transparent border border-cozy-primary text-cozy-primary px-1.5 py-0.5 rounded-sm text-[9px] font-bold">
+                              <Crown size={9} className="fill-cozy-primary stroke-cozy-primary" />
+                              <span>{reactions.crown}</span>
+                            </div>
+                          )}
+                          {reactions.heart === 0 && reactions.star === 0 && reactions.crown === 0 && (
+                            <span className="text-[9px] font-medium text-cozy-muted/60 italic">
+                              Unrated
+                            </span>
+                          )}
+                        </div>
+                        
+                        {drawing.image_url && (
+                          <button
+                            onClick={() => handleDownload(drawing)}
+                            className="p-1 rounded-md text-cozy-muted hover:bg-stone-200 hover:text-cozy-fg transition-colors active:scale-95"
+                            title="Download Drawing"
+                          >
+                            <Download size={14} />
+                          </button>
                         )}
                       </div>
                     </div>
