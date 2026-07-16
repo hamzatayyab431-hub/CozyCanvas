@@ -24,6 +24,7 @@ export interface UseRoomRealtimeProps {
   onDrawingCompleted?: (payload: { element: DrawingElement; playerId: string }) => void;
   onClearCanvas?: () => void;
   onDrawingStateChange?: (payload: { playerId: string; isDrawing: boolean }) => void;
+  onCursorMoveReceived?: (payload: { x: number; y: number; playerId: string }) => void;
 }
 
 // Helper to generate/retrieve persistent player ID
@@ -54,6 +55,7 @@ export const useRoomRealtime = ({
   onDrawingCompleted,
   onClearCanvas,
   onDrawingStateChange,
+  onCursorMoveReceived,
 }: UseRoomRealtimeProps) => {
   const [playerId, setPlayerId] = useState<string>('');
   const [nickname, setNicknameState] = useState<string>('Painter');
@@ -70,7 +72,9 @@ export const useRoomRealtime = ({
   const onDrawingCompletedRef = useRef(onDrawingCompleted);
   const onClearCanvasRef = useRef(onClearCanvas);
   const onDrawingStateChangeRef = useRef(onDrawingStateChange);
+  const onCursorMoveReceivedRef = useRef(onCursorMoveReceived);
 
+  // Update refs when props change
   useEffect(() => {
     onRoomChangeRef.current = onRoomChange;
     onRoundChangeRef.current = onRoundChange;
@@ -78,7 +82,16 @@ export const useRoomRealtime = ({
     onDrawingCompletedRef.current = onDrawingCompleted;
     onClearCanvasRef.current = onClearCanvas;
     onDrawingStateChangeRef.current = onDrawingStateChange;
-  });
+    onCursorMoveReceivedRef.current = onCursorMoveReceived;
+  }, [
+    onRoomChange,
+    onRoundChange,
+    onDrawingReceived,
+    onDrawingCompleted,
+    onClearCanvas,
+    onDrawingStateChange,
+    onCursorMoveReceived,
+  ]);
   
   // Store presence status locally to allow easy partial updates
   const presenceStateRef = useRef<PlayerPresence>({
@@ -173,6 +186,15 @@ export const useRoomRealtime = ({
     });
   }, [playerId]);
 
+  const broadcastCursor = useCallback((x: number, y: number) => {
+    if (!channelRef.current || !playerId) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'cursor_move',
+      payload: { x, y, playerId },
+    });
+  }, [playerId]);
+
   // Subscribe to Realtime channel
   useEffect(() => {
     if (!roomCode || !playerId) return;
@@ -241,6 +263,11 @@ export const useRoomRealtime = ({
       .on('broadcast', { event: 'drawing_state' }, ({ payload }) => {
         if (payload.playerId !== playerId && onDrawingStateChangeRef.current) {
           onDrawingStateChangeRef.current(payload);
+        }
+      })
+      .on('broadcast', { event: 'cursor_move' }, ({ payload }) => {
+        if (payload.playerId !== playerId && onCursorMoveReceivedRef.current) {
+          onCursorMoveReceivedRef.current(payload);
         }
       });
 
@@ -315,5 +342,6 @@ export const useRoomRealtime = ({
     broadcastStroke,
     broadcastDrawingCompleted,
     broadcastClearCanvas,
+    broadcastCursor,
   };
 };

@@ -122,12 +122,15 @@ export default function RoomPage({ params }: PageProps) {
   // 3. Realtime hooks integration
   const onDrawingReceivedCallbackRef = useRef<((payload: { element: any; playerId: string }) => void) | null>(null);
   const onClearCanvasCallbackRef = useRef<(() => void) | null>(null);
+  const onCursorMoveReceivedCallbackRef = useRef<((payload: { x: number; y: number; playerId: string }) => void) | null>(null);
 
   const {
     players,
     error: realtimeError,
     updatePresence,
     broadcastClearCanvas,
+    broadcastStroke,
+    broadcastCursor,
   } = useRoomRealtime({
     roomCode,
     roomId: room?.id,
@@ -135,6 +138,7 @@ export default function RoomPage({ params }: PageProps) {
     isHost: room?.host_id === playerId,
     onDrawingReceived: (payload) => onDrawingReceivedCallbackRef.current?.(payload),
     onClearCanvas: () => onClearCanvasCallbackRef.current?.(),
+    onCursorMoveReceived: (payload) => onCursorMoveReceivedCallbackRef.current?.(payload),
     onRoomChange: (payload) => {
       if (payload.new) {
         setRoom(payload.new as unknown as Room);
@@ -316,8 +320,11 @@ export default function RoomPage({ params }: PageProps) {
             players={players}
             updatePresence={updatePresence}
             broadcastClearCanvas={broadcastClearCanvas}
+            broadcastStroke={broadcastStroke}
+            broadcastCursor={broadcastCursor}
             onDrawingReceivedCallbackRef={onDrawingReceivedCallbackRef}
             onClearCanvasCallbackRef={onClearCanvasCallbackRef}
+            onCursorMoveReceivedCallbackRef={onCursorMoveReceivedCallbackRef}
           />
         )}
       </main>

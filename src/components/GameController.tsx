@@ -66,8 +66,11 @@ interface GameControllerProps {
   players: PlayerPresence[];
   updatePresence: (fields: Partial<Omit<PlayerPresence, 'playerId'>>) => Promise<void>;
   broadcastClearCanvas: () => void;
+  broadcastStroke: (element: any) => void;
+  broadcastCursor: (x: number, y: number) => void;
   onDrawingReceivedCallbackRef?: React.MutableRefObject<((payload: { element: any; playerId: string }) => void) | null>;
   onClearCanvasCallbackRef?: React.MutableRefObject<(() => void) | null>;
+  onCursorMoveReceivedCallbackRef?: React.MutableRefObject<((payload: { x: number; y: number; playerId: string }) => void) | null>;
 }
 
 export const GameController: React.FC<GameControllerProps> = ({
@@ -77,8 +80,11 @@ export const GameController: React.FC<GameControllerProps> = ({
   players,
   updatePresence,
   broadcastClearCanvas,
+  broadcastStroke,
+  broadcastCursor,
   onDrawingReceivedCallbackRef,
   onClearCanvasCallbackRef,
+  onCursorMoveReceivedCallbackRef,
 }) => {
   const isHost = room.host_id === playerId;
 
@@ -108,6 +114,10 @@ export const GameController: React.FC<GameControllerProps> = ({
   const [refY, setRefY] = useState<number>(0);
   const [refOpacity, setRefOpacity] = useState<number>(0.3);
   const [activeStamp, setActiveStamp] = useState<string>('❤️');
+
+  // Live Cursor state
+  const [cursors, setCursors] = useState<Record<string, { x: number, y: number }>>({});
+  const lastCursorBroadcast = useRef<number>(0);
 
   // Canvas Reference
   const canvasRef = useRef<DrawingCanvasRef>(null);
@@ -166,7 +176,17 @@ export const GameController: React.FC<GameControllerProps> = ({
         }
       };
     }
-  }, [onDrawingReceivedCallbackRef, onClearCanvasCallbackRef, room.settings?.collabMode]);
+    if (onCursorMoveReceivedCallbackRef) {
+      onCursorMoveReceivedCallbackRef.current = (payload) => {
+        if (room.settings?.collabMode) {
+          setCursors(prev => ({
+            ...prev,
+            [payload.playerId]: { x: payload.x, y: payload.y }
+          }));
+        }
+      };
+    }
+  }, [onDrawingReceivedCallbackRef, onClearCanvasCallbackRef, onCursorMoveReceivedCallbackRef, room.settings?.collabMode]);
 
   useEffect(() => {
     if (room.settings?.customPrompts) {
@@ -1121,6 +1141,29 @@ export const GameController: React.FC<GameControllerProps> = ({
           {!hasSubmitted ? (
             <div className="flex-1 flex flex-col gap-4 min-h-[500px]">
               <div className="flex-1 border border-stone-250 rounded-2xl overflow-hidden bg-stone-50 relative min-h-[400px]">
+                {room.settings?.collabMode && Object.entries(cursors).map(([pid, pos]) => {
+                  // Find player name
+                  const player = players.find(p => p.playerId === pid);
+                  const name = player?.nickname || 'Painter';
+                  return (
+                    <div
+                      key={pid}
+                      className="absolute pointer-events-none z-50 flex flex-col items-center drop-shadow-md transition-all duration-75 ease-out"
+                      style={{
+                        left: `${pos.x * 100}%`,
+                        top: `${pos.y * 100}%`,
+                        transform: 'translate(-2px, -2px)'
+                      }}
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-cozy-primary drop-shadow-sm">
+                        <path d="M5.5 3.21V20.8C5.5 21.46 6.3 21.79 6.77 21.32L11 17.09C11.18 16.91 11.44 16.81 11.7 16.81H18.5C19.16 16.81 19.49 16.01 19.02 15.54L5.5 3.21Z" fill="currentColor" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <div className="bg-cozy-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm whitespace-nowrap -mt-1 ml-4 shadow-xs">
+                        {name}
+                      </div>
+                    </div>
+                  );
+                })}
                 <DrawingCanvas
                   ref={canvasRef}
                   tool={tool}
@@ -1131,8 +1174,21 @@ export const GameController: React.FC<GameControllerProps> = ({
                   onHistoryChange={(undo, redo) => {
                     setCanUndo(undo);
                     setCanRedo(redo);
-                    // Sync drawing status with other player
                     updatePresence({ isDrawing: true });
+                  }}
+                  onStrokeComplete={(element) => {
+                    if (room.settings?.collabMode) {
+                      broadcastStroke(element);
+                    }
+                  }}
+                  onCursorMove={(x, y) => {
+                    if (room.settings?.collabMode) {
+                      const now = Date.now();
+                      if (now - lastCursorBroadcast.current > 50) {
+                        broadcastCursor(x, y);
+                        lastCursorBroadcast.current = now;
+                      }
+                    }
                   }}
                   brushType={brushType}
                   activeLayerId={activeLayerId}

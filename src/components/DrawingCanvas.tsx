@@ -48,6 +48,8 @@ export interface DrawingCanvasProps {
   opacity: number;
   fillShape?: boolean;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
+  onStrokeComplete?: (element: DrawingElement) => void;
+  onCursorMove?: (x: number, y: number) => void;
   ref?: React.Ref<DrawingCanvasRef | null>;
   
   // Advanced parameters
@@ -104,9 +106,11 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   opacity,
   fillShape = false,
   onHistoryChange,
+  onStrokeComplete,
+  onCursorMove,
   ref,
   
-  brushType = 'pen',
+  brushType = 'solid' as BrushType,
   activeLayerId = 'sketch',
   layers = [
     { id: 'background', name: 'Background Layer', visible: true, opacity: 1.0, locked: false },
@@ -626,7 +630,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const nextHistory = history.slice(0, historyIndex + 1);
     setHistory([...nextHistory, nextElements]);
     setHistoryIndex(nextHistory.length);
-  }, [history, historyIndex]);
+    if (onStrokeComplete) {
+      onStrokeComplete(newElement);
+    }
+  }, [history, historyIndex, onStrokeComplete]);
 
   const exportPNG = useCallback((background: string = '#ffffff') => {
     const canvas = document.createElement('canvas');
@@ -1027,6 +1034,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
     const virtualX = (screenX - pan.x) / zoom;
     const virtualY = (screenY - pan.y) / zoom;
+
+    if (onCursorMove) {
+      onCursorMove(virtualX / VIRTUAL_WIDTH, virtualY / VIRTUAL_HEIGHT);
+    }
 
     // Reference image drag repositioning
     if (isDraggingRefImage.current && refImage) {
