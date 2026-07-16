@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
 import { useRoomRealtime, getOrCreatePlayerId } from '../../../hooks/useRoomRealtime';
@@ -17,6 +17,7 @@ interface RoomSettings {
   maxRounds: number;
   roundDuration: number;
   category: string;
+  collabMode?: boolean;
 }
 
 interface Room {
@@ -119,6 +120,9 @@ export default function RoomPage({ params }: PageProps) {
   }, [roomCode]);
 
   // 3. Realtime hooks integration
+  const onDrawingReceivedCallbackRef = useRef<((payload: { element: any; playerId: string }) => void) | null>(null);
+  const onClearCanvasCallbackRef = useRef<(() => void) | null>(null);
+
   const {
     players,
     error: realtimeError,
@@ -129,6 +133,8 @@ export default function RoomPage({ params }: PageProps) {
     roomId: room?.id,
     initialNickname: savedName,
     isHost: room?.host_id === playerId,
+    onDrawingReceived: (payload) => onDrawingReceivedCallbackRef.current?.(payload),
+    onClearCanvas: () => onClearCanvasCallbackRef.current?.(),
     onRoomChange: (payload) => {
       if (payload.new) {
         setRoom(payload.new as unknown as Room);
@@ -310,6 +316,8 @@ export default function RoomPage({ params }: PageProps) {
             players={players}
             updatePresence={updatePresence}
             broadcastClearCanvas={broadcastClearCanvas}
+            onDrawingReceivedCallbackRef={onDrawingReceivedCallbackRef}
+            onClearCanvasCallbackRef={onClearCanvasCallbackRef}
           />
         )}
       </main>

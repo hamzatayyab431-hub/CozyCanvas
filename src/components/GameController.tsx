@@ -26,7 +26,8 @@ import {
   ChevronRight,
   Smile,
   Volume2,
-  VolumeX
+  VolumeX,
+  Brush
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { playPop, playChime, playFanfare, playWarning, isSoundEnabled, toggleSound } from '../lib/sound-utils';
@@ -37,6 +38,7 @@ interface RoomSettings {
   roundDuration: number; // in seconds, 0 = untimed
   category: string; // 'animals', 'objects', etc.
   customPrompts?: string[];
+  collabMode?: boolean;
 }
 
 interface Round {
@@ -64,6 +66,8 @@ interface GameControllerProps {
   players: PlayerPresence[];
   updatePresence: (fields: Partial<Omit<PlayerPresence, 'playerId'>>) => Promise<void>;
   broadcastClearCanvas: () => void;
+  onDrawingReceivedCallbackRef?: React.MutableRefObject<((payload: { element: any; playerId: string }) => void) | null>;
+  onClearCanvasCallbackRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 export const GameController: React.FC<GameControllerProps> = ({
@@ -73,6 +77,8 @@ export const GameController: React.FC<GameControllerProps> = ({
   players,
   updatePresence,
   broadcastClearCanvas,
+  onDrawingReceivedCallbackRef,
+  onClearCanvasCallbackRef,
 }) => {
   const isHost = room.host_id === playerId;
 
@@ -124,6 +130,7 @@ export const GameController: React.FC<GameControllerProps> = ({
   const [maxRounds, setMaxRounds] = useState<number>(room.settings?.maxRounds || 3);
   const [roundDuration, setRoundDuration] = useState<number>(room.settings?.roundDuration || 60);
   const [category, setCategory] = useState<string>(room.settings?.category || 'all');
+  const [collabMode, setCollabMode] = useState<boolean>(room.settings?.collabMode || false);
   const [customPromptsText, setCustomPromptsText] = useState<string>(() => {
     return room.settings?.customPrompts?.join('\n') || '';
   });
@@ -142,6 +149,24 @@ export const GameController: React.FC<GameControllerProps> = ({
       playPop();
     }
   };
+
+  // Bind Realtime Callbacks
+  useEffect(() => {
+    if (onDrawingReceivedCallbackRef) {
+      onDrawingReceivedCallbackRef.current = (payload) => {
+        if (room.settings?.collabMode && canvasRef.current) {
+          canvasRef.current.addExternalElement(payload.element);
+        }
+      };
+    }
+    if (onClearCanvasCallbackRef) {
+      onClearCanvasCallbackRef.current = () => {
+        if (room.settings?.collabMode && canvasRef.current) {
+          canvasRef.current.clear();
+        }
+      };
+    }
+  }, [onDrawingReceivedCallbackRef, onClearCanvasCallbackRef, room.settings?.collabMode]);
 
   useEffect(() => {
     if (room.settings?.customPrompts) {
@@ -346,6 +371,68 @@ export const GameController: React.FC<GameControllerProps> = ({
     }
   }, [currentRound, hasSubmitted, isSubmitting, room.id, playerId, nickname, updatePresence]);
 
+  // Finish Collaboration Action
+  const finishCollaboration = useCallback(async () => {
+    if (!currentRound || isSubmitting || !isHost) return;
+
+    if (!canvasRef.current) {
+      console.warn('Canvas reference is not available yet.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const pngData = canvasRef.current.exportPNG('#ffffff') || '';
+      if (!pngData) throw new Error('Could not export drawing.');
+
+      const blob = dataURIToBlob(pngData);
+      const filename = `${room.id}/${currentRound.id}/collab.png`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('drawings')
+        .upload(filename, blob, {
+          contentType: 'image/png',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('drawings')
+        .getPublicUrl(filename);
+
+      // Insert into drawings table representing the whole group
+      const { error: dbError } = await supabase
+        .from('drawings')
+        .insert({
+          room_id: room.id,
+          round_id: currentRound.id,
+          player_id: 'collab-group',
+          player_name: 'Collaborative Masterpiece',
+          canvas_data: { elements: [] },
+          image_url: publicUrl,
+        });
+
+      if (dbError) throw dbError;
+
+      // Finish room immediately
+      await supabase
+        .from('rooms')
+        .update({ status: 'finished' })
+        .eq('id', room.id);
+
+      playFanfare();
+
+    } catch (err) {
+      console.error('Error finishing collaboration:', err);
+      alert('Failed to finish collaboration. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [currentRound, isSubmitting, room.id, isHost]);
+
   // Auto-submit blank or incomplete canvas if timer hits 0
   const handleAutoSubmit = useCallback(async () => {
     await submitDrawing();
@@ -380,17 +467,18 @@ export const GameController: React.FC<GameControllerProps> = ({
   }, [room.status, currentRound, hasSubmitted, isSubmitting, handleAutoSubmit]);
 
   // Host action to update settings
-  const handleSaveSettings = async (overrideCategory?: string, overrideCustomPrompts?: string[]) => {
+  const handleSaveSettings = async (overrideCategory?: string, overrideCustomPrompts?: string[], overrideCollabMode?: boolean) => {
     if (!isHost) return;
 
     const cat = overrideCategory !== undefined ? overrideCategory : category;
     const promptsText = overrideCustomPrompts !== undefined ? overrideCustomPrompts : customPromptsText.split('\n').map(p => p.trim()).filter(Boolean);
+    const mode = overrideCollabMode !== undefined ? overrideCollabMode : collabMode;
 
     try {
       await supabase
         .from('rooms')
         .update({
-          settings: { maxRounds, roundDuration, category: cat, customPrompts: promptsText }
+          settings: { maxRounds, roundDuration, category: cat, customPrompts: promptsText, collabMode: mode }
         })
         .eq('id', room.id);
     } catch (err) {
@@ -404,12 +492,15 @@ export const GameController: React.FC<GameControllerProps> = ({
 
     try {
       const promptsArr = customPromptsText.split('\n').map(p => p.trim()).filter(Boolean);
+      const finalMaxRounds = collabMode ? 1 : maxRounds;
+      const finalRoundDuration = collabMode ? 0 : roundDuration;
+
       // Update room status
       const { error: roomError } = await supabase
         .from('rooms')
         .update({
           status: 'playing',
-          settings: { maxRounds, roundDuration, category, customPrompts: promptsArr }
+          settings: { maxRounds: finalMaxRounds, roundDuration: finalRoundDuration, category, customPrompts: promptsArr, collabMode }
         })
         .eq('id', room.id);
 
@@ -434,7 +525,7 @@ export const GameController: React.FC<GameControllerProps> = ({
           round_number: 1,
           prompt,
           status: 'drawing',
-          duration_seconds: roundDuration,
+          duration_seconds: finalRoundDuration,
           started_at: new Date().toISOString()
         });
 
@@ -690,8 +781,39 @@ export const GameController: React.FC<GameControllerProps> = ({
           <div className="border border-cozy-border bg-cozy-bg/50 p-6 rounded-2xl text-left flex flex-col gap-5">
             <h3 className="text-xs font-serif font-bold uppercase tracking-wider text-cozy-accent flex items-center gap-2 border-b-2 border-cozy-accent pb-2">
               <Settings size={14} />
-              Round Settings {isHost ? '(Host controls)' : '(View settings)'}
+              Game Settings {isHost ? '(Host controls)' : '(View settings)'}
             </h3>
+
+            {/* Collaborative Mode Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-xl border border-cozy-border bg-cozy-card shadow-sm transition-all">
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-cozy-fg">Collaborative Mode</span>
+                <span className="text-xs text-cozy-muted font-serif italic">Draw together on a single shared canvas.</span>
+              </div>
+              {isHost ? (
+                <button
+                  onClick={() => {
+                    const newMode = !collabMode;
+                    setCollabMode(newMode);
+                    handleSaveSettings(undefined, undefined, newMode);
+                    playPop();
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    collabMode ? 'bg-cozy-primary' : 'bg-stone-300 dark:bg-stone-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      collabMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              ) : (
+                <div className="text-sm font-bold text-cozy-fg">
+                  {collabMode ? '✅ Enabled' : '❌ Disabled'}
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 font-serif">
               {/* Category Selector */}
@@ -723,49 +845,53 @@ export const GameController: React.FC<GameControllerProps> = ({
               </div>
  
               {/* Round Duration */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-cozy-fg">Timer Duration</label>
-                {isHost ? (
-                  <select
-                    value={roundDuration}
-                    onChange={(e) => { setRoundDuration(Number(e.target.value)); handleSaveSettings(); playPop(); }}
-                    className="w-full text-sm p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg outline-none focus:ring-2 focus:ring-cozy-primary/20 focus:border-cozy-primary transition-all"
-                  >
-                    <option value={60}>⏱️ 1 Minute (Fast Duel)</option>
-                    <option value={180}>⏱️ 3 Minutes (Standard)</option>
-                    <option value={300}>⏱️ 5 Minutes (Cozy Artist)</option>
-                    <option value={600}>⏱️ 10 Minutes (Detail master)</option>
-                    <option value={0}>♾️ Untimed (Chill mode)</option>
-                  </select>
-                ) : (
-                  <div className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg text-sm font-semibold flex items-center gap-2">
-                    <Clock size={16} className="text-cozy-muted" />
-                    {roundDuration === 0 ? 'Untimed (Infinite)' : `${roundDuration / 60} min`}
-                  </div>
-                )}
-              </div>
- 
+              {!collabMode && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-cozy-fg">Timer Duration</label>
+                  {isHost ? (
+                    <select
+                      value={roundDuration}
+                      onChange={(e) => { setRoundDuration(Number(e.target.value)); handleSaveSettings(); playPop(); }}
+                      className="w-full text-sm p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg outline-none focus:ring-2 focus:ring-cozy-primary/20 focus:border-cozy-primary transition-all"
+                    >
+                      <option value={60}>⏱️ 1 Minute (Fast Duel)</option>
+                      <option value={180}>⏱️ 3 Minutes (Standard)</option>
+                      <option value={300}>⏱️ 5 Minutes (Cozy Artist)</option>
+                      <option value={600}>⏱️ 10 Minutes (Detail master)</option>
+                      <option value={0}>♾️ Untimed (Chill mode)</option>
+                    </select>
+                  ) : (
+                    <div className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg text-sm font-semibold flex items-center gap-2">
+                      <Clock size={16} className="text-cozy-muted" />
+                      {roundDuration === 0 ? 'Untimed (Infinite)' : `${roundDuration / 60} min`}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Max Rounds */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-cozy-fg">Total Rounds</label>
-                {isHost ? (
-                  <select
-                    value={maxRounds}
-                    onChange={(e) => { setMaxRounds(Number(e.target.value)); handleSaveSettings(); playPop(); }}
-                    className="w-full text-sm p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg outline-none focus:ring-2 focus:ring-cozy-primary/20 focus:border-cozy-primary transition-all"
-                  >
-                    <option value={1}>1 Round</option>
-                    <option value={3}>3 Rounds</option>
-                    <option value={5}>5 Rounds</option>
-                    <option value={8}>8 Rounds</option>
-                    <option value={10}>10 Rounds</option>
-                  </select>
-                ) : (
-                  <div className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg text-sm font-semibold">
-                    {maxRounds} Rounds
-                  </div>
-                )}
-              </div>
+              {!collabMode && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-cozy-fg">Total Rounds</label>
+                  {isHost ? (
+                    <select
+                      value={maxRounds}
+                      onChange={(e) => { setMaxRounds(Number(e.target.value)); handleSaveSettings(); playPop(); }}
+                      className="w-full text-sm p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg outline-none focus:ring-2 focus:ring-cozy-primary/20 focus:border-cozy-primary transition-all"
+                    >
+                      <option value={1}>1 Round</option>
+                      <option value={3}>3 Rounds</option>
+                      <option value={5}>5 Rounds</option>
+                      <option value={8}>8 Rounds</option>
+                      <option value={10}>10 Rounds</option>
+                    </select>
+                  ) : (
+                    <div className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg text-sm font-semibold">
+                      {maxRounds} Rounds
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Custom Prompts Text Area */}
@@ -955,20 +1081,38 @@ export const GameController: React.FC<GameControllerProps> = ({
                 </div>
               )}
 
-              {/* Submit Button */}
-              {!hasSubmitted ? (
-                <button
-                  onClick={() => { submitDrawing(); playPop(); }}
-                  disabled={isSubmitting}
-                  className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-stone-300 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all cursor-pointer"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Draft'}
-                </button>
+              {/* Submit / Finish Button */}
+              {room.settings?.collabMode ? (
+                isHost ? (
+                  <button
+                    onClick={() => { finishCollaboration(); playPop(); }}
+                    disabled={isSubmitting}
+                    className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-stone-300 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all cursor-pointer"
+                  >
+                    <CheckCircle size={14} />
+                    {isSubmitting ? 'Finishing...' : 'Finish Masterpiece'}
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1 bg-emerald-100 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    <Brush size={14} />
+                    <span>Collaborating...</span>
+                  </div>
+                )
               ) : (
-                <div className="flex items-center gap-1 bg-emerald-100 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold">
-                  <CheckCircle size={14} />
-                  <span>Submitted</span>
-                </div>
+                !hasSubmitted ? (
+                  <button
+                    onClick={() => { submitDrawing(); playPop(); }}
+                    disabled={isSubmitting}
+                    className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-stone-300 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all cursor-pointer"
+                  >
+                    {isSubmitting ? 'Submitting...' : 'Submit Draft'}
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1 bg-emerald-100 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    <CheckCircle size={14} />
+                    <span>Submitted</span>
+                  </div>
+                )
               )}
             </div>
           </div>

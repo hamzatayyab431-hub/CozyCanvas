@@ -38,6 +38,7 @@ export interface DrawingCanvasRef {
   zoomOut: () => void;
   resetZoomPan: () => void;
   clearLayer: (layerId: 'background' | 'sketch' | 'details') => void;
+  addExternalElement: (element: DrawingElement) => void;
 }
 
 export interface DrawingCanvasProps {
@@ -724,6 +725,19 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       const nextHistory = history.slice(0, historyIndex + 1);
       setHistory([...nextHistory, nextElements]);
       setHistoryIndex(nextHistory.length);
+    },
+    addExternalElement: (element: DrawingElement) => {
+      setHistory((prevHistory) => {
+        const currentElements = prevHistory[historyIndex] || [];
+        // Append the incoming external element to the current history frame
+        const nextElements = [...currentElements, element];
+        
+        // Replace the current frame rather than creating a new undo state
+        // so that collaborative strokes don't clutter the local undo stack individually.
+        const nextHistory = [...prevHistory];
+        nextHistory[historyIndex] = nextElements;
+        return nextHistory;
+      });
     },
   }), [zoom, pan, history, historyIndex, fitToScreen, exportPNG]);
 
