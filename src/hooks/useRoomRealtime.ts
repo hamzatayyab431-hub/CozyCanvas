@@ -232,13 +232,15 @@ export const useRoomRealtime = ({
     });
   }, [playerId]);
 
-  // Subscribe to Realtime channel
+  // Subscribe to Realtime channel — only depends on roomCode + playerId
+  // NOT roomId, so the channel is not torn down when the room object loads.
   useEffect(() => {
     if (!roomCode || !playerId) return;
 
-    // Clean up previous channel if any
+    // Properly remove any previous channel to avoid stale SDK cache
     if (channelRef.current) {
-      channelRef.current.unsubscribe();
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
     }
 
     const channelName = `room:${roomCode.toUpperCase()}`;
@@ -311,49 +313,14 @@ export const useRoomRealtime = ({
         }
       });
 
-    // 3. Postgres Changes Listeners for Rooms and Rounds
-    if (roomId) {
-      // Listen to room settings or status changes
-      channel.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'rooms',
-          filter: `id=eq.${roomId}`,
-        },
-        (payload) => {
-          if (onRoomChangeRef.current) {
-            onRoomChangeRef.current(payload);
-          }
-        }
-      );
-
-      // Listen to round starts, changes, status updates
-      channel.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'rounds',
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          if (onRoundChangeRef.current) {
-            onRoundChangeRef.current(payload);
-          }
-        }
-      );
-    }
-
     // Subscribe to channel
     channel.subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         setIsJoined(true);
         setError(null);
         // Start tracking our presence inside the channel
-        channel.track(presenceStateRef.current).catch((err) => {
-          console.error('Failed to track initial presence:', err);
+        channel.track(presenceStateRef.current).catch((trackErr) => {
+          console.error('Failed to track initial presence:', trackErr);
         });
       } else if (status === 'CHANNEL_ERROR') {
         setIsJoined(false);
@@ -373,11 +340,58 @@ export const useRoomRealtime = ({
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
       setIsJoined(false);
       channelRef.current = null;
     };
-  }, [roomCode, roomId, playerId]);
+  }, [roomCode, playerId]);
+
+  // Postgres Changes Listeners — separate effect so the main channel
+  // is NOT destroyed when roomId loads asynchronously.
+  useEffect(() => {
+    if (!roomId) return;
+
+    const channelName = `postgres:${roomCode.toUpperCase()}:${roomId}`;
+    const pgChannel = supabase.channel(channelName);
+
+    // Listen to room settings or status changes
+    pgChannel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'rooms',
+        filter: `id=eq.${roomId}`,
+      },
+      (payload) => {
+        if (onRoomChangeRef.current) {
+          onRoomChangeRef.current(payload);
+        }
+      }
+    );
+
+    // Listen to round starts, changes, status updates
+    pgChannel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'rounds',
+        filter: `room_id=eq.${roomId}`,
+      },
+      (payload) => {
+        if (onRoundChangeRef.current) {
+          onRoundChangeRef.current(payload);
+        }
+      }
+    );
+
+    pgChannel.subscribe();
+
+    return () => {
+      supabase.removeChannel(pgChannel);
+    };
+  }, [roomCode, roomId]);
 
   return {
     playerId,
