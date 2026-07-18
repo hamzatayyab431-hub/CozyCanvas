@@ -27,7 +27,9 @@ import {
   Smile,
   Volume2,
   VolumeX,
-  Brush
+  Brush,
+  Minimize,
+  Palette
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { playPop, playChime, playFanfare, playWarning, isSoundEnabled, toggleSound } from '../lib/sound-utils';
@@ -118,6 +120,7 @@ export const GameController: React.FC<GameControllerProps> = ({
   const [refY, setRefY] = useState<number>(0);
   const [refOpacity, setRefOpacity] = useState<number>(0.3);
   const [activeStamp, setActiveStamp] = useState<string>('❤️');
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState<boolean>(false);
 
   const lastCursorBroadcast = useRef<number>(0);
 
@@ -1241,58 +1244,80 @@ export const GameController: React.FC<GameControllerProps> = ({
           <Gallery drawings={drawings} currentPlayerId={playerId} />
         </div>
 
-        {/* 3. Floating Toolbar (Bottom Center) */}
+        {/* 3. Floating Toolbar (Floating Left under Header) */}
         {!hasSubmitted && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-[500px] max-w-[90vw] pointer-events-auto shadow-2xl">
-            <DrawingToolbar
-              tool={tool}
-              setTool={setTool}
-              color={color}
-              setColor={setColor}
-              size={size}
-              setSize={setSize}
-              opacity={opacity}
-              setOpacity={setOpacity}
-              fillShape={fillShape}
-              setFillShape={setFillShape}
-              canUndo={canUndo}
-              canRedo={canRedo}
-              onUndo={() => canvasRef.current?.undo()}
-              onRedo={() => canvasRef.current?.redo()}
-              onClear={() => {
-                canvasRef.current?.clear();
-                updatePresence({ isDrawing: false });
-              }}
-              onZoomIn={() => canvasRef.current?.zoomIn()}
-              onZoomOut={() => canvasRef.current?.zoomOut()}
-              onResetZoom={() => canvasRef.current?.resetZoomPan()}
-              onExport={submitDrawing}
-              brushType={brushType}
-              setBrushType={setBrushType}
-              activeLayerId={activeLayerId}
-              setActiveLayerId={setActiveLayerId}
-              layers={layers}
-              setLayers={setLayers}
-              symmetryMode={symmetryMode}
-              setSymmetryMode={setSymmetryMode}
-              gridVisible={gridVisible}
-              setGridVisible={setGridVisible}
-              gridSize={gridSize}
-              setGridSize={setGridSize}
-              refImage={refImage}
-              setRefImage={setRefImage}
-              refScale={refScale}
-              setRefScale={setRefScale}
-              refX={refX}
-              setRefX={setRefX}
-              refY={refY}
-              setRefY={setRefY}
-              refOpacity={refOpacity}
-              setRefOpacity={setRefOpacity}
-              activeStamp={activeStamp}
-              setActiveStamp={setActiveStamp}
-              onClearLayer={(layerId) => canvasRef.current?.clearLayer(layerId)}
-            />
+          <div className={`absolute top-[170px] left-4 z-10 w-[320px] pointer-events-auto transition-all duration-300 ${
+            isToolbarCollapsed ? 'h-12 w-12 overflow-hidden' : 'max-h-[calc(100vh-73px-170px-2rem)] overflow-y-auto scrollbar-thin shadow-2xl rounded-2xl'
+          }`}>
+            {isToolbarCollapsed ? (
+              <button
+                onClick={() => setIsToolbarCollapsed(false)}
+                className="w-12 h-12 rounded-2xl bg-white border border-stone-200 shadow-lg flex items-center justify-center text-cozy-primary hover:bg-stone-50 transition-all cursor-pointer active:scale-95"
+                title="Open Toolbar"
+              >
+                <Palette size={20} />
+              </button>
+            ) : (
+              <div className="relative">
+                {/* Collapse Button inside toolbar card */}
+                <button
+                  onClick={() => setIsToolbarCollapsed(true)}
+                  className="absolute top-3 right-3 z-20 p-1 text-stone-400 hover:text-stone-600 rounded-md hover:bg-stone-100 transition-colors cursor-pointer"
+                  title="Collapse Toolbar"
+                >
+                  <Minimize size={14} />
+                </button>
+                <DrawingToolbar
+                  tool={tool}
+                  setTool={setTool}
+                  color={color}
+                  setColor={setColor}
+                  size={size}
+                  setSize={setSize}
+                  opacity={opacity}
+                  setOpacity={setOpacity}
+                  fillShape={fillShape}
+                  setFillShape={setFillShape}
+                  canUndo={canUndo}
+                  canRedo={canRedo}
+                  onUndo={() => canvasRef.current?.undo()}
+                  onRedo={() => canvasRef.current?.redo()}
+                  onClear={() => {
+                    canvasRef.current?.clear();
+                    updatePresence({ isDrawing: false });
+                  }}
+                  onZoomIn={() => canvasRef.current?.zoomIn()}
+                  onZoomOut={() => canvasRef.current?.zoomOut()}
+                  onResetZoom={() => canvasRef.current?.resetZoomPan()}
+                  onExport={submitDrawing}
+                  brushType={brushType}
+                  setBrushType={setBrushType}
+                  activeLayerId={activeLayerId}
+                  setActiveLayerId={setActiveLayerId}
+                  layers={layers}
+                  setLayers={setLayers}
+                  symmetryMode={symmetryMode}
+                  setSymmetryMode={setSymmetryMode}
+                  gridVisible={gridVisible}
+                  setGridVisible={setGridVisible}
+                  gridSize={gridSize}
+                  setGridSize={setGridSize}
+                  refImage={refImage}
+                  setRefImage={setRefImage}
+                  refScale={refScale}
+                  setRefScale={setRefScale}
+                  refX={refX}
+                  setRefX={setRefX}
+                  refY={refY}
+                  setRefY={setRefY}
+                  refOpacity={refOpacity}
+                  setRefOpacity={setRefOpacity}
+                  activeStamp={activeStamp}
+                  setActiveStamp={setActiveStamp}
+                  onClearLayer={(layerId) => canvasRef.current?.clearLayer(layerId)}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
