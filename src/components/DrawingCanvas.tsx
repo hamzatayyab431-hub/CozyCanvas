@@ -226,6 +226,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const activeElementRef = useRef<DrawingElement | null>(null);
   const cursorCoordsRef = useRef<{ x: number; y: number } | null>(null);
   const externalActiveElementsRef = useRef<Map<string, DrawingElement>>(new Map());
+  const externalCommittedElementsRef = useRef<DrawingElement[]>([]);
   const externalCursorsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   
   const lastStrokeBroadcastTimeRef = useRef<number>(0);
@@ -345,14 +346,17 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     ctx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     ctx.restore();
 
-    const activeElements = history[historyIndex] || [];
+    // Combine local history elements with external committed elements
+    const localElements = history[historyIndex] || [];
+    const externalElements = externalCommittedElementsRef.current;
+    const allElements = [...localElements, ...externalElements];
     const layerOrder: ('background' | 'sketch' | 'details')[] = ['background', 'sketch', 'details'];
     
     for (const layerId of layerOrder) {
       const layerConf = layers.find((l) => l.id === layerId);
       if (!layerConf || !layerConf.visible) continue;
 
-      const layerElements = activeElements.filter(
+      const layerElements = allElements.filter(
         (el) => (el.layerId || 'sketch') === layerId
       );
 
@@ -754,14 +758,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     }
 
-    const activeElements = history[historyIndex] || [];
+    const localElements = history[historyIndex] || [];
+    const externalElements = externalCommittedElementsRef.current;
+    const allElements = [...localElements, ...externalElements];
     const layerOrder: ('background' | 'sketch' | 'details')[] = ['background', 'sketch', 'details'];
     
     for (const layerId of layerOrder) {
       const layerConf = layers.find((l) => l.id === layerId);
       if (!layerConf || !layerConf.visible) continue;
 
-      const layerElements = activeElements.filter(
+      const layerElements = allElements.filter(
         (el) => (el.layerId || 'sketch') === layerId
       );
 
@@ -795,6 +801,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       const nextHistory = history.slice(0, historyIndex + 1);
       setHistory([...nextHistory, []]);
       setHistoryIndex(nextHistory.length);
+      externalCommittedElementsRef.current = [];
     },
     exportPNG,
     zoomIn: () => {
@@ -839,16 +846,11 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       setHistory([...nextHistory, nextElements]);
       setHistoryIndex(nextHistory.length);
     },
-    // Append completed collaborative stroke
-    addExternalElement: (element: DrawingElement, playerId: string) => {
-      externalActiveElementsRef.current.delete(playerId);
-      setHistory((prevHistory) => {
-        const currentElements = prevHistory[historyIndex] || [];
-        const nextElements = [...currentElements, element];
-        const nextHistory = [...prevHistory];
-        nextHistory[historyIndex] = nextElements;
-        return nextHistory;
-      });
+    // Append completed collaborative stroke to the external ref (no stale closure risk)
+    addExternalElement: (element: DrawingElement, _playerId: string) => {
+      externalActiveElementsRef.current.delete(_playerId);
+      externalCommittedElementsRef.current = [...externalCommittedElementsRef.current, element];
+      redrawOffscreen();
       requestDraw();
     },
     // Draw real-time temporary stroke coordinates
@@ -865,7 +867,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       externalCursorsRef.current.set(playerId, { x, y });
       requestDraw();
     }
-  }), [zoom, pan, history, historyIndex, fitToScreen, exportPNG, requestDraw]);
+  }), [zoom, pan, history, historyIndex, fitToScreen, exportPNG, redrawOffscreen, requestDraw]);
 
   // Eyedropper Color sampling helper
   const sampleColorAt = (virtualX: number, virtualY: number) => {
