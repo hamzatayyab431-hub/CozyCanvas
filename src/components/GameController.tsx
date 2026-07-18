@@ -64,11 +64,13 @@ interface GameControllerProps {
   playerId: string;
   nickname: string;
   players: PlayerPresence[];
-  updatePresence: (fields: Partial<Omit<PlayerPresence, 'playerId'>>) => Promise<void>;
+  updatePresence: (fields: Partial<Omit<PlayerPresence, 'playerId' | 'color'>>) => Promise<void>;
   broadcastClearCanvas: () => void;
   broadcastStroke: (element: any) => void;
+  broadcastDrawingCompleted: (element: any) => void;
   broadcastCursor: (x: number, y: number) => void;
   onDrawingReceivedCallbackRef?: React.MutableRefObject<((payload: { element: any; playerId: string }) => void) | null>;
+  onDrawingCompletedCallbackRef?: React.MutableRefObject<((payload: { element: any; playerId: string }) => void) | null>;
   onClearCanvasCallbackRef?: React.MutableRefObject<(() => void) | null>;
   onCursorMoveReceivedCallbackRef?: React.MutableRefObject<((payload: { x: number; y: number; playerId: string }) => void) | null>;
 }
@@ -81,8 +83,10 @@ export const GameController: React.FC<GameControllerProps> = ({
   updatePresence,
   broadcastClearCanvas,
   broadcastStroke,
+  broadcastDrawingCompleted,
   broadcastCursor,
   onDrawingReceivedCallbackRef,
+  onDrawingCompletedCallbackRef,
   onClearCanvasCallbackRef,
   onCursorMoveReceivedCallbackRef,
 }) => {
@@ -115,8 +119,6 @@ export const GameController: React.FC<GameControllerProps> = ({
   const [refOpacity, setRefOpacity] = useState<number>(0.3);
   const [activeStamp, setActiveStamp] = useState<string>('❤️');
 
-  // Live Cursor state
-  const [cursors, setCursors] = useState<Record<string, { x: number, y: number }>>({});
   const lastCursorBroadcast = useRef<number>(0);
 
   // Canvas Reference
@@ -165,7 +167,14 @@ export const GameController: React.FC<GameControllerProps> = ({
     if (onDrawingReceivedCallbackRef) {
       onDrawingReceivedCallbackRef.current = (payload) => {
         if (room.settings?.collabMode && canvasRef.current) {
-          canvasRef.current.addExternalElement(payload.element);
+          canvasRef.current.updateExternalStroke(payload.playerId, payload.element);
+        }
+      };
+    }
+    if (onDrawingCompletedCallbackRef) {
+      onDrawingCompletedCallbackRef.current = (payload) => {
+        if (room.settings?.collabMode && canvasRef.current) {
+          canvasRef.current.addExternalElement(payload.element, payload.playerId);
         }
       };
     }
@@ -178,15 +187,12 @@ export const GameController: React.FC<GameControllerProps> = ({
     }
     if (onCursorMoveReceivedCallbackRef) {
       onCursorMoveReceivedCallbackRef.current = (payload) => {
-        if (room.settings?.collabMode) {
-          setCursors(prev => ({
-            ...prev,
-            [payload.playerId]: { x: payload.x, y: payload.y }
-          }));
+        if (room.settings?.collabMode && canvasRef.current) {
+          canvasRef.current.updateExternalCursor(payload.playerId, payload.x, payload.y);
         }
       };
     }
-  }, [onDrawingReceivedCallbackRef, onClearCanvasCallbackRef, onCursorMoveReceivedCallbackRef, room.settings?.collabMode]);
+  }, [onDrawingReceivedCallbackRef, onDrawingCompletedCallbackRef, onClearCanvasCallbackRef, onCursorMoveReceivedCallbackRef, room.settings?.collabMode]);
 
   useEffect(() => {
     if (room.settings?.customPrompts) {
@@ -1071,201 +1077,68 @@ export const GameController: React.FC<GameControllerProps> = ({
   // ==========================================
   if (currentRound && currentRound.status === 'drawing') {
     return (
-      <div className="w-full flex flex-col lg:flex-row gap-6 p-4">
+      <div className="relative w-full h-[calc(100vh-73px)] overflow-hidden bg-stone-50 select-none">
         {/* Main Canvas Area */}
-        <div className="flex-1 flex flex-col gap-4">
-          {/* Round Header */}
-          <div className="bg-white/85 backdrop-blur-md border border-stone-200/80 p-4 sm:p-5 rounded-2xl shadow-lg shadow-stone-200/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-col gap-1 min-w-0">
-              <span className="text-[10px] font-serif font-bold text-white bg-cozy-primary px-2 py-0.5 rounded-sm w-fit">
-                Round {currentRound.round_number} of {room.settings?.maxRounds}
-              </span>
-              <h2 className="text-lg font-serif font-black text-cozy-fg truncate mt-1 italic">
-                &quot;{currentRound.prompt}&quot;
-              </h2>
-            </div>
-
-            {/* Timer or Status badge */}
-            <div className="flex items-center gap-2 self-start sm:self-center font-serif">
-              {timeLeft !== null ? (
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-sm border text-sm font-bold border-cozy-border bg-cozy-bg text-cozy-muted ${
-                  timeLeft <= 10 ? 'animate-pulse' : ''
-                }`}>
-                  <Timer size={14} className="text-cozy-primary" />
-                  <span>{formatTime(timeLeft)}</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-cozy-border bg-cozy-bg text-cozy-muted text-xs font-semibold">
-                  <Clock size={12} />
-                  <span>Untimed</span>
-                </div>
-              )}
-
-              {/* Submit / Finish Button */}
-              {room.settings?.collabMode ? (
-                isHost ? (
-                  <button
-                    onClick={() => { finishCollaboration(); playPop(); }}
-                    disabled={isSubmitting}
-                    className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-stone-300 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all cursor-pointer"
-                  >
-                    <CheckCircle size={14} />
-                    {isSubmitting ? 'Finishing...' : 'Finish Masterpiece'}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-1 bg-emerald-100 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold">
-                    <Brush size={14} />
-                    <span>Collaborating...</span>
-                  </div>
-                )
-              ) : (
-                !hasSubmitted ? (
-                  <button
-                    onClick={() => { submitDrawing(); playPop(); }}
-                    disabled={isSubmitting}
-                    className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-stone-300 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all cursor-pointer"
-                  >
-                    {isSubmitting ? 'Submitting...' : 'Submit Draft'}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-1 bg-emerald-100 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold">
-                    <CheckCircle size={14} />
-                    <span>Submitted</span>
-                  </div>
-                )
-              )}
-            </div>
+        {!hasSubmitted ? (
+          <div className="absolute inset-0 w-full h-full z-0">
+            <DrawingCanvas
+              ref={canvasRef}
+              tool={tool}
+              color={color}
+              size={size}
+              opacity={opacity}
+              fillShape={fillShape}
+              players={players}
+              onHistoryChange={(undo, redo) => {
+                setCanUndo(undo);
+                setCanRedo(redo);
+                updatePresence({ isDrawing: true });
+              }}
+              onStrokeUpdate={(element) => {
+                if (room.settings?.collabMode) {
+                  broadcastStroke(element);
+                }
+              }}
+              onStrokeComplete={(element) => {
+                if (room.settings?.collabMode) {
+                  broadcastDrawingCompleted(element);
+                }
+              }}
+              onCursorMove={(x, y) => {
+                if (room.settings?.collabMode) {
+                  const now = Date.now();
+                  if (now - lastCursorBroadcast.current > 50) {
+                    broadcastCursor(x, y);
+                    lastCursorBroadcast.current = now;
+                  }
+                }
+              }}
+              brushType={brushType}
+              activeLayerId={activeLayerId}
+              layers={layers}
+              symmetryMode={symmetryMode}
+              gridVisible={gridVisible}
+              gridSize={gridSize}
+              refImage={refImage}
+              refScale={refScale}
+              refX={refX}
+              refY={refY}
+              refOpacity={refOpacity}
+              activeStamp={activeStamp}
+              onRefImageChange={(x, y) => {
+                setRefX(x);
+                setRefY(y);
+              }}
+            />
           </div>
-
-          {/* Drawing Canvas and controls */}
-          {!hasSubmitted ? (
-            <div className="flex-1 flex flex-col gap-4 min-h-[500px]">
-              <div className="flex-1 border border-stone-250 rounded-2xl overflow-hidden bg-stone-50 relative min-h-[400px]">
-                {room.settings?.collabMode && Object.entries(cursors).map(([pid, pos]) => {
-                  // Find player name
-                  const player = players.find(p => p.playerId === pid);
-                  const name = player?.nickname || 'Painter';
-                  return (
-                    <div
-                      key={pid}
-                      className="absolute pointer-events-none z-50 flex flex-col items-center drop-shadow-md transition-all duration-75 ease-out"
-                      style={{
-                        left: `${pos.x * 100}%`,
-                        top: `${pos.y * 100}%`,
-                        transform: 'translate(-2px, -2px)'
-                      }}
-                    >
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-cozy-primary drop-shadow-sm">
-                        <path d="M5.5 3.21V20.8C5.5 21.46 6.3 21.79 6.77 21.32L11 17.09C11.18 16.91 11.44 16.81 11.7 16.81H18.5C19.16 16.81 19.49 16.01 19.02 15.54L5.5 3.21Z" fill="currentColor" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      <div className="bg-cozy-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm whitespace-nowrap -mt-1 ml-4 shadow-xs">
-                        {name}
-                      </div>
-                    </div>
-                  );
-                })}
-                <DrawingCanvas
-                  ref={canvasRef}
-                  tool={tool}
-                  color={color}
-                  size={size}
-                  opacity={opacity}
-                  fillShape={fillShape}
-                  onHistoryChange={(undo, redo) => {
-                    setCanUndo(undo);
-                    setCanRedo(redo);
-                    updatePresence({ isDrawing: true });
-                  }}
-                  onStrokeComplete={(element) => {
-                    if (room.settings?.collabMode) {
-                      broadcastStroke(element);
-                    }
-                  }}
-                  onCursorMove={(x, y) => {
-                    if (room.settings?.collabMode) {
-                      const now = Date.now();
-                      if (now - lastCursorBroadcast.current > 50) {
-                        broadcastCursor(x, y);
-                        lastCursorBroadcast.current = now;
-                      }
-                    }
-                  }}
-                  brushType={brushType}
-                  activeLayerId={activeLayerId}
-                  layers={layers}
-                  symmetryMode={symmetryMode}
-                  gridVisible={gridVisible}
-                  gridSize={gridSize}
-                  refImage={refImage}
-                  refScale={refScale}
-                  refX={refX}
-                  refY={refY}
-                  refOpacity={refOpacity}
-                  activeStamp={activeStamp}
-                  onRefImageChange={(x, y) => {
-                    setRefX(x);
-                    setRefY(y);
-                  }}
-                />
-              </div>
-
-              <DrawingToolbar
-                tool={tool}
-                setTool={setTool}
-                color={color}
-                setColor={setColor}
-                size={size}
-                setSize={setSize}
-                opacity={opacity}
-                setOpacity={setOpacity}
-                fillShape={fillShape}
-                setFillShape={setFillShape}
-                canUndo={canUndo}
-                canRedo={canRedo}
-                onUndo={() => canvasRef.current?.undo()}
-                onRedo={() => canvasRef.current?.redo()}
-                onClear={() => {
-                  canvasRef.current?.clear();
-                  updatePresence({ isDrawing: false });
-                }}
-                onZoomIn={() => canvasRef.current?.zoomIn()}
-                onZoomOut={() => canvasRef.current?.zoomOut()}
-                onResetZoom={() => canvasRef.current?.resetZoomPan()}
-                onExport={submitDrawing}
-                brushType={brushType}
-                setBrushType={setBrushType}
-                activeLayerId={activeLayerId}
-                setActiveLayerId={setActiveLayerId}
-                layers={layers}
-                setLayers={setLayers}
-                symmetryMode={symmetryMode}
-                setSymmetryMode={setSymmetryMode}
-                gridVisible={gridVisible}
-                setGridVisible={setGridVisible}
-                gridSize={gridSize}
-                setGridSize={setGridSize}
-                refImage={refImage}
-                setRefImage={setRefImage}
-                refScale={refScale}
-                setRefScale={setRefScale}
-                refX={refX}
-                setRefX={setRefX}
-                refY={refY}
-                setRefY={setRefY}
-                refOpacity={refOpacity}
-                setRefOpacity={setRefOpacity}
-                activeStamp={activeStamp}
-                setActiveStamp={setActiveStamp}
-                onClearLayer={(layerId) => canvasRef.current?.clearLayer(layerId)}
-              />
-            </div>
-          ) : (
-            // WAITING ROOM SCREEN AFTER SUBMITTING
-            <div className="flex-1 bg-cozy-card border-2 border-cozy-secondary rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-4 py-16 shadow-lg">
+        ) : (
+          // WAITING ROOM SCREEN AFTER SUBMITTING
+          <div className="absolute inset-0 flex items-center justify-center p-4 z-5 bg-stone-50/50 backdrop-blur-xs pointer-events-none">
+            <div className="bg-cozy-card border-2 border-cozy-secondary rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-4 py-16 shadow-lg max-w-md w-full pointer-events-auto">
               <div className="p-5 bg-cozy-bg border border-cozy-primary text-cozy-primary rounded-full animate-bounce">
                 <Smile size={32} className="text-cozy-primary" />
               </div>
-              <div className="flex flex-col gap-1 max-w-sm font-serif">
+              <div className="flex flex-col gap-1 font-serif">
                 <span className="text-lg font-bold text-cozy-fg">Drawing Submitted!</span>
                 <p className="text-xs text-cozy-muted leading-relaxed mt-1 italic">
                   Nice work! Your artwork has been framed. Waiting for your opponent to put down their brush...
@@ -1274,7 +1147,7 @@ export const GameController: React.FC<GameControllerProps> = ({
 
               {/* Show preview of own drawing */}
               {drawings.find((d) => d.round_id === currentRound.id && d.player_id === playerId)?.image_url && (
-                <div className="mt-4 border-8 border-cozy-card bg-cozy-card shadow-md aspect-4/3 max-w-[320px] ring-1 ring-cozy-border relative">
+                <div className="mt-4 border-8 border-cozy-card bg-cozy-card shadow-md aspect-4/3 max-w-[280px] ring-1 ring-cozy-border relative">
                   <img
                     src={drawings.find((d) => d.round_id === currentRound.id && d.player_id === playerId)?.image_url || ''}
                     alt="My submitted drawing"
@@ -1298,14 +1171,130 @@ export const GameController: React.FC<GameControllerProps> = ({
                 </button>
               )}
             </div>
-          )}
+          </div>
+        )}
+
+        {/* 1. Round Header (Floating Top Left) */}
+        <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md border border-stone-200/80 p-4 rounded-2xl shadow-lg max-w-sm pointer-events-auto flex flex-col gap-1">
+          <span className="text-[10px] font-serif font-bold text-white bg-cozy-primary px-2 py-0.5 rounded-sm w-fit">
+            Round {currentRound.round_number} of {room.settings?.maxRounds}
+          </span>
+          <h2 className="text-sm font-serif font-black text-cozy-fg truncate mt-1 italic">
+            &quot;{currentRound.prompt}&quot;
+          </h2>
+          
+          {/* Timer or Status badge */}
+          <div className="flex items-center gap-2 mt-1.5 font-serif">
+            {timeLeft !== null ? (
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-sm border text-xs font-bold border-cozy-border bg-cozy-bg text-cozy-muted ${
+                timeLeft <= 10 ? 'animate-pulse' : ''
+              }`}>
+                <Timer size={12} className="text-cozy-primary" />
+                <span>{formatTime(timeLeft)}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-cozy-border bg-cozy-bg text-cozy-muted text-[10px] font-semibold">
+                <Clock size={10} />
+                <span>Untimed</span>
+              </div>
+            )}
+
+            {/* Submit / Finish Button */}
+            {room.settings?.collabMode ? (
+              isHost ? (
+                <button
+                  onClick={() => { finishCollaboration(); playPop(); }}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-1 bg-orange-500 hover:bg-orange-600 disabled:bg-stone-300 text-white font-bold px-3 py-1 rounded-lg text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+                >
+                  <CheckCircle size={12} />
+                  {isSubmitting ? 'Finishing...' : 'Finish Masterpiece'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1 bg-emerald-100 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                  <Brush size={12} />
+                  <span>Collaborating...</span>
+                </div>
+              )
+            ) : (
+              !hasSubmitted ? (
+                <button
+                  onClick={() => { submitDrawing(); playPop(); }}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-1 bg-orange-500 hover:bg-orange-600 disabled:bg-stone-300 text-white font-bold px-3 py-1 rounded-lg text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit Draft'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1 bg-emerald-100 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                  <CheckCircle size={12} />
+                  <span>Submitted</span>
+                </div>
+              )
+            )}
+          </div>
         </div>
 
-        {/* Side Panel (Presence & History) */}
-        <div className="w-full lg:w-[320px] flex flex-col gap-6 shrink-0">
+        {/* 2. Side Panel (Presence & History - Floating Top Right) */}
+        <div className="absolute top-4 right-4 z-10 w-[320px] max-h-[calc(100vh-73px-2rem)] overflow-y-auto flex flex-col gap-4 pointer-events-auto scrollbar-thin">
           <RoomPresence players={players} currentPlayerId={playerId} />
           <Gallery drawings={drawings} currentPlayerId={playerId} />
         </div>
+
+        {/* 3. Floating Toolbar (Bottom Center) */}
+        {!hasSubmitted && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-[500px] max-w-[90vw] pointer-events-auto shadow-2xl">
+            <DrawingToolbar
+              tool={tool}
+              setTool={setTool}
+              color={color}
+              setColor={setColor}
+              size={size}
+              setSize={setSize}
+              opacity={opacity}
+              setOpacity={setOpacity}
+              fillShape={fillShape}
+              setFillShape={setFillShape}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onUndo={() => canvasRef.current?.undo()}
+              onRedo={() => canvasRef.current?.redo()}
+              onClear={() => {
+                canvasRef.current?.clear();
+                updatePresence({ isDrawing: false });
+              }}
+              onZoomIn={() => canvasRef.current?.zoomIn()}
+              onZoomOut={() => canvasRef.current?.zoomOut()}
+              onResetZoom={() => canvasRef.current?.resetZoomPan()}
+              onExport={submitDrawing}
+              brushType={brushType}
+              setBrushType={setBrushType}
+              activeLayerId={activeLayerId}
+              setActiveLayerId={setActiveLayerId}
+              layers={layers}
+              setLayers={setLayers}
+              symmetryMode={symmetryMode}
+              setSymmetryMode={setSymmetryMode}
+              gridVisible={gridVisible}
+              setGridVisible={setGridVisible}
+              gridSize={gridSize}
+              setGridSize={setGridSize}
+              refImage={refImage}
+              setRefImage={setRefImage}
+              refScale={refScale}
+              setRefScale={setRefScale}
+              refX={refX}
+              setRefX={setRefX}
+              refY={refY}
+              setRefY={setRefY}
+              refOpacity={refOpacity}
+              setRefOpacity={setRefOpacity}
+              activeStamp={activeStamp}
+              setActiveStamp={setActiveStamp}
+              onClearLayer={(layerId) => canvasRef.current?.clearLayer(layerId)}
+            />
+          </div>
+        )}
       </div>
     );
   }

@@ -20,6 +20,7 @@ import {
   getElementBoundingBox,
   isPointNearElement,
 } from '../lib/drawing-utils';
+import { PlayerPresence } from '../hooks/useRoomRealtime';
 
 export interface LayerConfig {
   id: 'background' | 'sketch' | 'details';
@@ -38,7 +39,9 @@ export interface DrawingCanvasRef {
   zoomOut: () => void;
   resetZoomPan: () => void;
   clearLayer: (layerId: 'background' | 'sketch' | 'details') => void;
-  addExternalElement: (element: DrawingElement) => void;
+  addExternalElement: (element: DrawingElement, playerId: string) => void;
+  updateExternalStroke: (playerId: string, element: DrawingElement | null) => void;
+  updateExternalCursor: (playerId: string, x: number, y: number) => void;
 }
 
 export interface DrawingCanvasProps {
@@ -49,6 +52,7 @@ export interface DrawingCanvasProps {
   fillShape?: boolean;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   onStrokeComplete?: (element: DrawingElement) => void;
+  onStrokeUpdate?: (element: DrawingElement) => void;
   onCursorMove?: (x: number, y: number) => void;
   ref?: React.Ref<DrawingCanvasRef | null>;
   
@@ -67,10 +71,13 @@ export interface DrawingCanvasProps {
   activeStamp?: string;
   onColorSelect?: (color: string) => void;
   onRefImageChange?: (x: number, y: number) => void;
+
+  // Cursors rendering metadata
+  players?: PlayerPresence[];
 }
 
-const VIRTUAL_WIDTH = 1600;
-const VIRTUAL_HEIGHT = 1200;
+const VIRTUAL_WIDTH = 1920;
+const VIRTUAL_HEIGHT = 1080;
 
 // Helper to translate coordinates/points of an element
 function translateElement(element: DrawingElement, dx: number, dy: number): DrawingElement {
@@ -99,6 +106,70 @@ function translateElement(element: DrawingElement, dx: number, dy: number): Draw
   return clone;
 }
 
+// Draw a player's cursor and name badge directly on the canvas context
+function drawCursor(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  name: string,
+  color: string,
+  zoom: number,
+  pan: { x: number; y: number },
+  scaleX: number,
+  scaleY: number,
+  canvasWidth: number,
+  canvasHeight: number
+) {
+  // Convert normalized coordinates to screen pixel space
+  const screenX = (x * VIRTUAL_WIDTH) * scaleX * zoom + pan.x;
+  const screenY = (y * VIRTUAL_HEIGHT) * scaleY * zoom + pan.y;
+
+  // Clip cursors outside the screen
+  if (screenX < 0 || screenX > canvasWidth || screenY < 0 || screenY > canvasHeight) return;
+
+  ctx.save();
+  ctx.translate(screenX, screenY);
+
+  // Draw cursor pointer arrow
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, 15);
+  ctx.lineTo(4.5, 11.5);
+  ctx.lineTo(9.5, 16.5);
+  ctx.lineTo(11.5, 14.5);
+  ctx.lineTo(6.5, 9.5);
+  ctx.lineTo(11, 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Draw nickname tag
+  ctx.font = 'bold 10px sans-serif';
+  const nameWidth = ctx.measureText(name).width;
+  const badgeWidth = nameWidth + 8;
+  const badgeHeight = 16;
+  const badgeX = 12;
+  const badgeY = 10;
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4);
+  } else {
+    ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
+  }
+  ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name, badgeX + 4, badgeY + badgeHeight / 2);
+
+  ctx.restore();
+}
+
 export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   tool,
   color,
@@ -107,6 +178,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   fillShape = false,
   onHistoryChange,
   onStrokeComplete,
+  onStrokeUpdate,
   onCursorMove,
   ref,
   
@@ -128,17 +200,19 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   activeStamp = '❤️',
   onColorSelect,
   onRefImageChange,
+
+  players = [],
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Viewport transformation
-  const [zoom, setZoom] = useState<number>(1);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState<number>(0.95);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 20, y: 20 });
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
-  // Refs for tracking zoom and pan inside wheel scroll listeners
+  // Refs for tracking zoom and pan inside listeners
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
@@ -148,17 +222,19 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [history, setHistory] = useState<DrawingElement[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState<number>(0);
 
-  // Active element currently being drawn
-  const [activeElement, setActiveElement] = useState<DrawingElement | null>(null);
+  // Ref-based drawing parameters to eliminate React render lag
+  const activeElementRef = useRef<DrawingElement | null>(null);
+  const cursorCoordsRef = useRef<{ x: number; y: number } | null>(null);
+  const externalActiveElementsRef = useRef<Map<string, DrawingElement>>(new Map());
+  const externalCursorsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  
+  const lastStrokeBroadcastTimeRef = useRef<number>(0);
 
   // Selection states
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const clipboard = useRef<DrawingElement | null>(null);
   const dragStartElements = useRef<DrawingElement[] | null>(null);
   const dragDidMove = useRef(false);
-
-  // Cursor coordinates in screen space for brush preview
-  const [cursorCoords, setCursorCoords] = useState<{ x: number; y: number } | null>(null);
 
   // Reference Image Loading
   const [refImageElement, setRefImageElement] = useState<HTMLImageElement | null>(null);
@@ -240,16 +316,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const fitToScreen = useCallback(() => {
     if (!containerRef.current) return;
     const { width, height } = containerRef.current.getBoundingClientRect();
-    const margin = 40;
-    const zoomX = (width - margin) / VIRTUAL_WIDTH;
-    const zoomY = (height - margin) / VIRTUAL_HEIGHT;
-    const nextZoom = Math.max(0.1, Math.min(zoomX, zoomY, 1.2));
-
-    const nextPanX = (width - VIRTUAL_WIDTH * nextZoom) / 2;
-    const nextPanY = (height - VIRTUAL_HEIGHT * nextZoom) / 2;
-
-    setZoom(nextZoom);
-    setPan({ x: nextPanX, y: nextPanY });
+    // Center it with a 2.5% padding margin on all sides
+    setZoom(0.95);
+    setPan({
+      x: width * 0.025,
+      y: height * 0.025,
+    });
   }, []);
 
   // Auto-fit screen once sizes are resolved
@@ -274,8 +346,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     ctx.restore();
 
     const activeElements = history[historyIndex] || [];
-    
-    // Sort and draw by layer configuration hierarchy: background -> sketch -> details
     const layerOrder: ('background' | 'sketch' | 'details')[] = ['background', 'sketch', 'details'];
     
     for (const layerId of layerOrder) {
@@ -307,15 +377,20 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Warm gray workspace background
+    // Workspace backdrop color
     ctx.fillStyle = '#fafaf9'; // stone-50
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 1. Draw canvas shadow
+    // Calculate projection scales to match virtual bounds perfectly
+    const scaleX = canvasSize.width / VIRTUAL_WIDTH;
+    const scaleY = canvasSize.height / VIRTUAL_HEIGHT;
+
+    // 1. Draw canvas shadow sheet
     ctx.save();
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);
-    ctx.shadowColor = 'rgba(120, 113, 108, 0.15)';
+    ctx.scale(scaleX, scaleY);
+    ctx.shadowColor = 'rgba(120, 113, 108, 0.12)';
     ctx.shadowBlur = 24;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 8;
@@ -328,6 +403,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       ctx.save();
       ctx.translate(pan.x, pan.y);
       ctx.scale(zoom, zoom);
+      ctx.scale(scaleX, scaleY);
       ctx.globalAlpha = refOpacity;
       const imgWidth = refImageElement.width * refScale;
       const imgHeight = refImageElement.height * refScale;
@@ -339,31 +415,54 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     ctx.save();
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);
+    ctx.scale(scaleX, scaleY);
     if (offscreenCanvasRef.current) {
       ctx.drawImage(offscreenCanvasRef.current, 0, 0);
     }
+    ctx.restore();
 
-    // 4. Draw active stroke / shape
-    if (activeElement) {
+    // 4. Draw active stroke / shape (local user drawing in-progress)
+    const currentActiveElement = activeElementRef.current;
+    if (currentActiveElement) {
       const layerConf = layers.find((l) => l.id === activeLayerId);
       if (layerConf && layerConf.visible) {
         const clonedActive = {
-          ...activeElement,
-          opacity: activeElement.opacity * layerConf.opacity,
+          ...currentActiveElement,
+          opacity: currentActiveElement.opacity * layerConf.opacity,
         };
         ctx.save();
+        ctx.translate(pan.x, pan.y);
+        ctx.scale(zoom, zoom);
+        ctx.scale(scaleX, scaleY);
         drawElementWithSymmetry(ctx, clonedActive, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         ctx.restore();
       }
     }
 
-    // 5. Draw grid guides
+    // 5. Draw active strokes of other collaborative users
+    externalActiveElementsRef.current.forEach((el) => {
+      const layerConf = layers.find((l) => l.id === (el.layerId || 'sketch'));
+      if (!layerConf || !layerConf.visible) return;
+      const clonedActive = {
+        ...el,
+        opacity: el.opacity * layerConf.opacity,
+      };
+      ctx.save();
+      ctx.translate(pan.x, pan.y);
+      ctx.scale(zoom, zoom);
+      ctx.scale(scaleX, scaleY);
+      drawElementWithSymmetry(ctx, clonedActive, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+      ctx.restore();
+    });
+
+    // 6. Draw grid guides
     if (gridVisible && gridSize > 5) {
       ctx.save();
       ctx.translate(pan.x, pan.y);
       ctx.scale(zoom, zoom);
+      ctx.scale(scaleX, scaleY);
       ctx.strokeStyle = 'rgba(120, 113, 108, 0.08)'; // stone-500 line
-      ctx.lineWidth = 1 / zoom;
+      ctx.lineWidth = 1 / (zoom * Math.min(scaleX, scaleY));
 
       // Vertical grid lines
       for (let x = gridSize; x < VIRTUAL_WIDTH; x += gridSize) {
@@ -382,7 +481,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       ctx.restore();
     }
 
-    // 6. Draw dashed bounding box for selected element
+    // 7. Draw dashed bounding box for selected element
     const currentElements = history[historyIndex] || [];
     const selectedElement = currentElements.find((el) => el.id === selectedElementId);
     if (selectedElement && tool === 'select') {
@@ -390,18 +489,18 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       ctx.save();
       ctx.translate(pan.x, pan.y);
       ctx.scale(zoom, zoom);
+      ctx.scale(scaleX, scaleY);
       ctx.strokeStyle = '#3b82f6'; // blue-500 selection line
-      ctx.lineWidth = 1.5 / zoom;
+      ctx.lineWidth = 1.5 / (zoom * Math.min(scaleX, scaleY));
       ctx.setLineDash([5, 5]);
       ctx.strokeRect(box.minX - 4, box.minY - 4, (box.maxX - box.minX) + 8, (box.maxY - box.minY) + 8);
       ctx.restore();
     }
 
-    ctx.restore();
-
-    // 7. Draw brush size preview
+    // 8. Draw brush size circle preview (local user hover)
+    const localCursorCoords = cursorCoordsRef.current;
     if (
-      cursorCoords &&
+      localCursorCoords &&
       !isDrawing.current &&
       !isPanning &&
       tool !== 'text' &&
@@ -411,23 +510,33 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     ) {
       ctx.save();
       ctx.beginPath();
-      ctx.arc(cursorCoords.x, cursorCoords.y, (size * zoom) / 2, 0, 2 * Math.PI);
+      ctx.arc(localCursorCoords.x, localCursorCoords.y, (size * zoom * Math.min(scaleX, scaleY)) / 2, 0, 2 * Math.PI);
       ctx.strokeStyle = 'rgba(68, 64, 60, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(cursorCoords.x, cursorCoords.y, (size * zoom) / 2 - 1, 0, 2 * Math.PI);
+      ctx.arc(localCursorCoords.x, localCursorCoords.y, (size * zoom * Math.min(scaleX, scaleY)) / 2 - 1, 0, 2 * Math.PI);
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.restore();
     }
+
+    // 9. Draw other users' cursors directly onto the canvas (no DOM re-renders)
+    externalCursorsRef.current.forEach((pos, pid) => {
+      const player = players.find((p) => p.playerId === pid);
+      if (player) {
+        const name = player.nickname || 'Painter';
+        const color = player.color || '#E05A47';
+        drawCursor(ctx, pos.x, pos.y, name, color, zoom, pan, scaleX, scaleY, canvas.width, canvas.height);
+      }
+    });
+
   }, [
     zoom,
     pan,
-    activeElement,
-    cursorCoords,
+    canvasSize,
     tool,
     size,
     isPanning,
@@ -443,20 +552,32 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     historyIndex,
     layers,
     activeLayerId,
+    players,
   ]);
+
+  // Request high performance draw scheduling via rAF
+  const drawRequestedRef = useRef(false);
+  const requestDraw = useCallback(() => {
+    if (drawRequestedRef.current) return;
+    drawRequestedRef.current = true;
+    requestAnimationFrame(() => {
+      drawRequestedRef.current = false;
+      draw();
+    });
+  }, [draw]);
 
   // Keep drawing up-to-date
   useEffect(() => {
-    draw();
-  }, [canvasSize, zoom, pan, activeElement, cursorCoords, draw]);
+    requestDraw();
+  }, [canvasSize, zoom, pan, requestDraw]);
 
   // Redraw offscreen canvas when history/index/layers shift
   useEffect(() => {
     redrawOffscreen();
-    draw();
-  }, [history, historyIndex, layers, redrawOffscreen, draw]);
+    requestDraw();
+  }, [history, historyIndex, layers, redrawOffscreen, requestDraw]);
 
-  // Notify parent component about history change safely using a ref to avoid infinite render loops
+  // Notify parent component about history changes safely using a ref
   const onHistoryChangeRef = useRef(onHistoryChange);
   useEffect(() => {
     onHistoryChangeRef.current = onHistoryChange;
@@ -470,19 +591,93 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
   }, [history, historyIndex]);
 
-  // Monitor Space key down / up for grabbing
+  // Keyboard shortcut refs to prevent event listener churn
+  const toolRef = useRef(tool);
+  const selectedElementIdRef = useRef(selectedElementId);
+  useEffect(() => { toolRef.current = tool; }, [tool]);
+  useEffect(() => { selectedElementIdRef.current = selectedElementId; }, [selectedElementId]);
+
+  // Selection Action Methods
+  const handleDeleteSelection = useCallback(() => {
+    if (!selectedElementIdRef.current) return;
+    const currentElements = history[historyIndex] || [];
+    const nextElements = currentElements.filter((el) => el.id !== selectedElementIdRef.current);
+    const nextHistory = history.slice(0, historyIndex + 1);
+    setHistory([...nextHistory, nextElements]);
+    setHistoryIndex(nextHistory.length);
+    setSelectedElementId(null);
+  }, [history, historyIndex]);
+
+  const handleCopySelection = useCallback(() => {
+    if (!selectedElementIdRef.current) return;
+    const currentElements = history[historyIndex] || [];
+    const selected = currentElements.find((el) => el.id === selectedElementIdRef.current);
+    if (selected) {
+      clipboard.current = selected;
+    }
+  }, [history, historyIndex]);
+
+  const handleCutSelection = useCallback(() => {
+    if (!selectedElementIdRef.current) return;
+    handleCopySelection();
+    handleDeleteSelection();
+  }, [handleCopySelection, handleDeleteSelection]);
+
+  const handlePasteSelection = useCallback(() => {
+    if (!clipboard.current) return;
+    const clone = JSON.parse(JSON.stringify(clipboard.current)) as DrawingElement;
+    clone.id = Math.random().toString(36).substring(7);
+    clone.layerId = activeLayerId; // Paste on the active layer
+    const offset = 40;
+    const pasted = translateElement(clone, offset, offset);
+
+    const currentElements = history[historyIndex] || [];
+    const nextElements = [...currentElements, pasted];
+    const nextHistory = history.slice(0, historyIndex + 1);
+    setHistory([...nextHistory, nextElements]);
+    setHistoryIndex(nextHistory.length);
+    setSelectedElementId(pasted.id);
+  }, [history, historyIndex, activeLayerId]);
+
+  // Spacebar grab panning & Selection Hotkeys registered ONCE
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return;
+      }
+
       if (e.code === 'Space') {
-        if (
-          document.activeElement?.tagName !== 'INPUT' &&
-          document.activeElement?.tagName !== 'TEXTAREA'
-        ) {
+        e.preventDefault();
+        setIsSpacePressed(true);
+        if (canvasRef.current) {
+          canvasRef.current.style.cursor = 'grab';
+        }
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedElementIdRef.current && toolRef.current === 'select') {
           e.preventDefault();
-          setIsSpacePressed(true);
-          if (canvasRef.current) {
-            canvasRef.current.style.cursor = 'grab';
+          handleDeleteSelection();
+        }
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key.toLowerCase() === 'c') {
+          if (selectedElementIdRef.current && toolRef.current === 'select') {
+            e.preventDefault();
+            handleCopySelection();
           }
+        } else if (e.key.toLowerCase() === 'x') {
+          if (selectedElementIdRef.current && toolRef.current === 'select') {
+            e.preventDefault();
+            handleCutSelection();
+          }
+        } else if (e.key.toLowerCase() === 'v') {
+          e.preventDefault();
+          handlePasteSelection();
         }
       }
     };
@@ -491,7 +686,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       if (e.code === 'Space') {
         setIsSpacePressed(false);
         if (canvasRef.current) {
-          canvasRef.current.style.cursor = tool === 'text' ? 'text' : 'crosshair';
+          canvasRef.current.style.cursor = toolRef.current === 'text' ? 'text' : 'crosshair';
         }
       }
     };
@@ -502,9 +697,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [tool]);
+  }, [handleDeleteSelection, handleCopySelection, handleCutSelection, handlePasteSelection]);
 
-  // Scroll wheel zoom
+  // Scroll wheel zoom registered ONCE on canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -535,94 +730,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     };
   }, []);
 
-  // Selection Action Methods
-  const handleDeleteSelection = useCallback(() => {
-    if (!selectedElementId) return;
-    const currentElements = history[historyIndex] || [];
-    const nextElements = currentElements.filter((el) => el.id !== selectedElementId);
-    const nextHistory = history.slice(0, historyIndex + 1);
-    setHistory([...nextHistory, nextElements]);
-    setHistoryIndex(nextHistory.length);
-    setSelectedElementId(null);
-  }, [selectedElementId, history, historyIndex]);
-
-  const handleCopySelection = useCallback(() => {
-    if (!selectedElementId) return;
-    const currentElements = history[historyIndex] || [];
-    const selected = currentElements.find((el) => el.id === selectedElementId);
-    if (selected) {
-      clipboard.current = selected;
-    }
-  }, [selectedElementId, history, historyIndex]);
-
-  const handleCutSelection = useCallback(() => {
-    if (!selectedElementId) return;
-    handleCopySelection();
-    handleDeleteSelection();
-  }, [selectedElementId, handleCopySelection, handleDeleteSelection]);
-
-  const handlePasteSelection = useCallback(() => {
-    if (!clipboard.current) return;
-    const clone = JSON.parse(JSON.stringify(clipboard.current)) as DrawingElement;
-    clone.id = Math.random().toString(36).substring(7);
-    clone.layerId = activeLayerId; // Paste on the active layer
-    const offset = 40;
-    const pasted = translateElement(clone, offset, offset);
-
-    const currentElements = history[historyIndex] || [];
-    const nextElements = [...currentElements, pasted];
-    const nextHistory = history.slice(0, historyIndex + 1);
-    setHistory([...nextHistory, nextElements]);
-    setHistoryIndex(nextHistory.length);
-    setSelectedElementId(pasted.id);
-  }, [history, historyIndex, activeLayerId]);
-
-  // Keyboard Shortcuts for Selection Clipboard
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        document.activeElement?.tagName === 'INPUT' ||
-        document.activeElement?.tagName === 'TEXTAREA'
-      ) {
-        return;
-      }
-
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedElementId && tool === 'select') {
-          e.preventDefault();
-          handleDeleteSelection();
-        }
-      }
-
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key.toLowerCase() === 'c') {
-          if (selectedElementId && tool === 'select') {
-            e.preventDefault();
-            handleCopySelection();
-          }
-        } else if (e.key.toLowerCase() === 'x') {
-          if (selectedElementId && tool === 'select') {
-            e.preventDefault();
-            handleCutSelection();
-          }
-        } else if (e.key.toLowerCase() === 'v') {
-          e.preventDefault();
-          handlePasteSelection();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    selectedElementId,
-    tool,
-    handleDeleteSelection,
-    handleCopySelection,
-    handleCutSelection,
-    handlePasteSelection,
-  ]);
-
   // Committing drawing elements
   const commitElement = useCallback((newElement: DrawingElement) => {
     const currentElements = history[historyIndex] || [];
@@ -648,9 +755,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
 
     const activeElements = history[historyIndex] || [];
-    
-    // Draw sorted layers
     const layerOrder: ('background' | 'sketch' | 'details')[] = ['background', 'sketch', 'details'];
+    
     for (const layerId of layerOrder) {
       const layerConf = layers.find((l) => l.id === layerId);
       if (!layerConf || !layerConf.visible) continue;
@@ -673,7 +779,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     return canvas.toDataURL('image/png');
   }, [history, historyIndex, layers]);
 
-  // Expose Imperative APIs
+  // Expose Imperative APIs to GameController
   useImperativeHandle(ref, () => ({
     undo: () => {
       if (historyIndex > 0) {
@@ -733,20 +839,33 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       setHistory([...nextHistory, nextElements]);
       setHistoryIndex(nextHistory.length);
     },
-    addExternalElement: (element: DrawingElement) => {
+    // Append completed collaborative stroke
+    addExternalElement: (element: DrawingElement, playerId: string) => {
+      externalActiveElementsRef.current.delete(playerId);
       setHistory((prevHistory) => {
         const currentElements = prevHistory[historyIndex] || [];
-        // Append the incoming external element to the current history frame
         const nextElements = [...currentElements, element];
-        
-        // Replace the current frame rather than creating a new undo state
-        // so that collaborative strokes don't clutter the local undo stack individually.
         const nextHistory = [...prevHistory];
         nextHistory[historyIndex] = nextElements;
         return nextHistory;
       });
+      requestDraw();
     },
-  }), [zoom, pan, history, historyIndex, fitToScreen, exportPNG]);
+    // Draw real-time temporary stroke coordinates
+    updateExternalStroke: (playerId: string, element: DrawingElement | null) => {
+      if (!element) {
+        externalActiveElementsRef.current.delete(playerId);
+      } else {
+        externalActiveElementsRef.current.set(playerId, element);
+      }
+      requestDraw();
+    },
+    // Track cursor movements of partners
+    updateExternalCursor: (playerId: string, x: number, y: number) => {
+      externalCursorsRef.current.set(playerId, { x, y });
+      requestDraw();
+    }
+  }), [zoom, pan, history, historyIndex, fitToScreen, exportPNG, requestDraw]);
 
   // Eyedropper Color sampling helper
   const sampleColorAt = (virtualX: number, virtualY: number) => {
@@ -760,7 +879,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     if (x < 0 || x >= VIRTUAL_WIDTH || y < 0 || y >= VIRTUAL_HEIGHT) return;
 
     const pixel = ctx.getImageData(x, y, 1, 1).data;
-    // transparent fallback to white
     if (pixel[3] === 0) {
       if (onColorSelect) onColorSelect('#ffffff');
       return;
@@ -790,7 +908,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const isMiddleButton = e.button === 1;
     const isSpace = isSpacePressed;
 
-    // Handle spacebar/middle click pan
     if (isSpace || isMiddleButton) {
       setIsPanning(true);
       startPan.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
@@ -798,7 +915,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       return;
     }
 
-    // Handle Shift + drag to reposition reference image
     if (e.shiftKey && refImage) {
       isDraggingRefImage.current = true;
       refDragStart.current = { x: e.clientX, y: e.clientY };
@@ -807,13 +923,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       return;
     }
 
-    // Touch pinch trackers
     activeTouches.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     const touchIds = Object.keys(activeTouches.current).map(Number);
 
     if (touchIds.length >= 2) {
       isDrawing.current = false;
-      setActiveElement(null);
+      activeElementRef.current = null;
 
       const p1 = activeTouches.current[touchIds[0]];
       const p2 = activeTouches.current[touchIds[1]];
@@ -830,10 +945,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       const rect = canvas.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
-      const virtualX = (screenX - pan.x) / zoom;
-      const virtualY = (screenY - pan.y) / zoom;
+      
+      const scaleX = canvasSize.width / VIRTUAL_WIDTH;
+      const scaleY = canvasSize.height / VIRTUAL_HEIGHT;
+      const virtualX = (screenX - pan.x) / (zoom * scaleX);
+      const virtualY = (screenY - pan.y) / (zoom * scaleY);
 
-      // Lock bounds boundary checks
       if (
         virtualX < 0 ||
         virtualX > VIRTUAL_WIDTH ||
@@ -843,29 +960,24 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         return;
       }
 
-      // Check if current layer is locked
       const activeLayer = layers.find((l) => l.id === activeLayerId);
       if (activeLayer?.locked && tool !== 'select' && tool !== 'eyedropper') {
         return;
       }
 
-      // 1. Eyedropper tool selection
       if (tool === 'eyedropper') {
         sampleColorAt(virtualX, virtualY);
-        isDrawing.current = true; // allow dragging color eyedropper
+        isDrawing.current = true;
         return;
       }
 
-      // 2. Selection tool logic
       if (tool === 'select') {
         const currentElements = history[historyIndex] || [];
-        
-        // Check if hitting active selection
         if (selectedElementId) {
           const selected = currentElements.find((el) => el.id === selectedElementId);
           if (selected && isPointNearElement(virtualX, virtualY, selected)) {
             const layerConf = layers.find((l) => l.id === (selected.layerId || 'sketch'));
-            if (layerConf?.locked) return; // cannot move locked elements
+            if (layerConf?.locked) return;
             isDraggingSelection.current = true;
             selectionDragStart.current = { x: virtualX, y: virtualY };
             dragStartElements.current = JSON.parse(JSON.stringify(currentElements));
@@ -874,7 +986,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           }
         }
 
-        // Search for hit element
         let found = false;
         const searchLayers: ('background' | 'sketch' | 'details')[] = ['details', 'sketch', 'background'];
         for (const layerId of searchLayers) {
@@ -885,7 +996,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
               setSelectedElementId(el.id);
               const layerConf = layers.find((l) => l.id === (el.layerId || 'sketch'));
               if (layerConf?.locked) {
-                // If layer locked, select it but do not drag
                 found = true;
                 break;
               }
@@ -906,7 +1016,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         return;
       }
 
-      // 3. Flood Fill bucket trigger
       if (tool === 'fill') {
         const newElement: FillElement = {
           id: Math.random().toString(36).substring(7),
@@ -923,7 +1032,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         return;
       }
 
-      // 4. Drawing trigger
       isDrawing.current = true;
 
       if (tool === 'pen' || tool === 'eraser') {
@@ -938,7 +1046,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           brushType: brushType,
           symmetryMode,
         };
-        setActiveElement(newElement);
+        activeElementRef.current = newElement;
       } else if (
         tool === 'line' ||
         tool === 'circle' ||
@@ -959,7 +1067,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           layerId: activeLayerId,
           symmetryMode,
         };
-        setActiveElement(newElement);
+        activeElementRef.current = newElement;
       } else if (tool === 'stamp') {
         const newElement: StampElement = {
           id: Math.random().toString(36).substring(7),
@@ -967,14 +1075,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           emoji: activeStamp || '❤️',
           x: virtualX,
           y: virtualY,
-          size: 24, // Initial starting stamp size
+          size: 24,
           opacity,
           color,
           layerId: activeLayerId,
           symmetryMode,
         };
-        setActiveElement(newElement);
+        activeElementRef.current = newElement;
       }
+      
+      requestDraw();
     }
   };
 
@@ -987,7 +1097,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    setCursorCoords({ x: screenX, y: screenY });
+    cursorCoordsRef.current = { x: screenX, y: screenY };
 
     if (activeTouches.current[e.pointerId]) {
       activeTouches.current[e.pointerId] = { x: e.clientX, y: e.clientY };
@@ -998,12 +1108,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         x: e.clientX - startPan.current.x,
         y: e.clientY - startPan.current.y,
       });
+      requestDraw();
       return;
     }
 
     const touchIds = Object.keys(activeTouches.current).map(Number);
     if (touchIds.length >= 2) {
-      // Zoom pinch calculations
       const p1 = activeTouches.current[touchIds[0]];
       const p2 = activeTouches.current[touchIds[1]];
       const currentDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
@@ -1029,17 +1139,20 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       pinchStartDist.current = currentDist;
       pinchStartZoom.current = nextZoom;
       pinchStartCenter.current = currentCenter;
+      requestDraw();
       return;
     }
 
-    const virtualX = (screenX - pan.x) / zoom;
-    const virtualY = (screenY - pan.y) / zoom;
+    // Convert screen pointer coordinates to standardized virtual board dimensions
+    const scaleX = canvasSize.width / VIRTUAL_WIDTH;
+    const scaleY = canvasSize.height / VIRTUAL_HEIGHT;
+    const virtualX = (screenX - pan.x) / (zoom * scaleX);
+    const virtualY = (screenY - pan.y) / (zoom * scaleY);
 
     if (onCursorMove) {
       onCursorMove(virtualX / VIRTUAL_WIDTH, virtualY / VIRTUAL_HEIGHT);
     }
 
-    // Reference image drag repositioning
     if (isDraggingRefImage.current && refImage) {
       const dx = (e.clientX - refDragStart.current.x) / zoom;
       const dy = (e.clientY - refDragStart.current.y) / zoom;
@@ -1048,16 +1161,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       if (onRefImageChange) {
         onRefImageChange(nextX, nextY);
       }
+      requestDraw();
       return;
     }
 
-    // Eyedropper drag sampling
     if (tool === 'eyedropper' && isDrawing.current) {
       sampleColorAt(virtualX, virtualY);
+      requestDraw();
       return;
     }
 
-    // Selection move dragging
     if (isDraggingSelection.current && selectedElementId) {
       const dx = virtualX - selectionDragStart.current.x;
       const dy = virtualY - selectionDragStart.current.y;
@@ -1072,51 +1185,86 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           return el;
         });
 
-        // Inline modify current frame for fast drag rendering
         const nextHistory = [...history];
         nextHistory[historyIndex] = updatedElements;
         setHistory(nextHistory);
 
         selectionDragStart.current = { x: virtualX, y: virtualY };
       }
+      requestDraw();
       return;
     }
 
-    // Draw drag lines / stamps
-    if (isDrawing.current && activeElement) {
-      if (activeElement.type === 'pen' || activeElement.type === 'eraser') {
-        const currentPoints = (activeElement as FreehandElement).points;
-        const newPoints = [
-          ...currentPoints,
-          { x: virtualX, y: virtualY, pressure: e.pressure || 0.5 },
-        ];
-        setActiveElement({
-          ...activeElement,
-          points: newPoints,
-        } as FreehandElement);
+    if (isDrawing.current && activeElementRef.current) {
+      const currentActive = activeElementRef.current;
+      if (currentActive.type === 'pen' || currentActive.type === 'eraser') {
+        const currentPoints = (currentActive as FreehandElement).points;
+        const lastPoint = currentPoints[currentPoints.length - 1];
+        const dist = Math.hypot(virtualX - lastPoint.x, virtualY - lastPoint.y);
+
+        // Density coordinate filter: limit point additions to 2 virtual pixels separation
+        if (dist >= 2) {
+          const newPoints = [
+            ...currentPoints,
+            { x: virtualX, y: virtualY, pressure: e.pressure || 0.5 },
+          ];
+          const updatedElement = {
+            ...currentActive,
+            points: newPoints,
+          } as FreehandElement;
+          activeElementRef.current = updatedElement;
+
+          // Throttled real-time stroke coordinates broadcasting
+          if (onStrokeUpdate) {
+            const now = Date.now();
+            if (now - lastStrokeBroadcastTimeRef.current > 40) {
+              onStrokeUpdate(updatedElement);
+              lastStrokeBroadcastTimeRef.current = now;
+            }
+          }
+        }
       } else if (
-        activeElement.type === 'line' ||
-        activeElement.type === 'circle' ||
-        activeElement.type === 'rectangle' ||
-        activeElement.type === 'triangle'
+        currentActive.type === 'line' ||
+        currentActive.type === 'circle' ||
+        currentActive.type === 'rectangle' ||
+        currentActive.type === 'triangle'
       ) {
-        setActiveElement({
-          ...activeElement,
+        const updatedElement = {
+          ...currentActive,
           endX: virtualX,
           endY: virtualY,
-        } as ShapeElement);
-      } else if (activeElement.type === 'stamp') {
-        // Size stamp dynamically with drag length distance
-        const dx = virtualX - activeElement.x;
-        const dy = virtualY - activeElement.y;
+        } as ShapeElement;
+        activeElementRef.current = updatedElement;
+
+        if (onStrokeUpdate) {
+          const now = Date.now();
+          if (now - lastStrokeBroadcastTimeRef.current > 40) {
+            onStrokeUpdate(updatedElement);
+            lastStrokeBroadcastTimeRef.current = now;
+          }
+        }
+      } else if (currentActive.type === 'stamp') {
+        const dx = virtualX - currentActive.x;
+        const dy = virtualY - currentActive.y;
         const dragDist = Math.hypot(dx, dy);
         const nextSize = Math.max(12, dragDist * 2);
-        setActiveElement({
-          ...activeElement,
+        const updatedElement = {
+          ...currentActive,
           size: nextSize,
-        } as StampElement);
+        } as StampElement;
+        activeElementRef.current = updatedElement;
+
+        if (onStrokeUpdate) {
+          const now = Date.now();
+          if (now - lastStrokeBroadcastTimeRef.current > 40) {
+            onStrokeUpdate(updatedElement);
+            lastStrokeBroadcastTimeRef.current = now;
+          }
+        }
       }
     }
+
+    requestDraw();
   };
 
   // Pointer Up Handler
@@ -1149,7 +1297,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       return;
     }
 
-    // Commits selection translations cleanly
     if (isDraggingSelection.current) {
       isDraggingSelection.current = false;
       if (dragDidMove.current && dragStartElements.current) {
@@ -1163,20 +1310,23 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       return;
     }
 
-    if (isDrawing.current && activeElement) {
+    if (isDrawing.current && activeElementRef.current) {
       isDrawing.current = false;
-      commitElement(activeElement);
-      setActiveElement(null);
+      const finalElement = activeElementRef.current;
+      activeElementRef.current = null;
+      commitElement(finalElement);
     }
 
-    // Text placing editor click
     if (tool === 'text') {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
-      const virtualX = (screenX - pan.x) / zoom;
-      const virtualY = (screenY - pan.y) / zoom;
+      
+      const scaleX = canvasSize.width / VIRTUAL_WIDTH;
+      const scaleY = canvasSize.height / VIRTUAL_HEIGHT;
+      const virtualX = (screenX - pan.x) / (zoom * scaleX);
+      const virtualY = (screenY - pan.y) / (zoom * scaleY);
 
       if (
         virtualX < 0 ||
@@ -1195,13 +1345,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         value: '',
       });
     }
+    requestDraw();
   };
 
   const handlePointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     delete activeTouches.current[e.pointerId];
     if (isDrawing.current) {
       isDrawing.current = false;
-      setActiveElement(null);
+      activeElementRef.current = null;
     }
     if (isPanning) {
       setIsPanning(false);
@@ -1209,10 +1360,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     if (isDraggingSelection.current) {
       isDraggingSelection.current = false;
     }
+    requestDraw();
   };
 
   const handlePointerLeave = () => {
-    setCursorCoords(null);
+    cursorCoordsRef.current = null;
+    requestDraw();
   };
 
   const handleTextSubmit = () => {
@@ -1235,7 +1388,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setTextInput(null);
   };
 
-  // Adjust cursor based on current active tool
   const getCursorStyle = () => {
     if (isPanning) return 'grabbing';
     if (isSpacePressed) return 'grab';
@@ -1245,15 +1397,17 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     return 'crosshair';
   };
 
-  // Bounding box floating action overlay details
   const currentElementsList = history[historyIndex] || [];
   const selectedElement = currentElementsList.find((el) => el.id === selectedElementId);
   
   let selectionToolbarStyle: React.CSSProperties | null = null;
   if (selectedElement && tool === 'select') {
     const box = getElementBoundingBox(selectedElement);
-    const topCenterX = ((box.minX + box.maxX) / 2) * zoom + pan.x;
-    const topY = box.minY * zoom + pan.y;
+    const scaleX = canvasSize.width / VIRTUAL_WIDTH;
+    const scaleY = canvasSize.height / VIRTUAL_HEIGHT;
+
+    const topCenterX = ((box.minX + box.maxX) / 2) * scaleX * zoom + pan.x;
+    const topY = box.minY * scaleY * zoom + pan.y;
     selectionToolbarStyle = {
       left: `${topCenterX}px`,
       top: `${topY - 45}px`,
@@ -1279,10 +1433,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         onPointerLeave={handlePointerLeave}
       />
 
-      {/* Floating Selection Action Panel overlay */}
+      {/* Floating Selection Action Panel */}
       {selectedElement && tool === 'select' && selectionToolbarStyle && (
         <div
-          className="absolute z-40 bg-white/95 border border-stone-200/80 shadow-lg rounded-xl p-1 flex gap-1 items-center animate-fade-in"
+          className="absolute z-40 bg-white/95 border border-stone-200/80 shadow-lg rounded-xl p-1 flex gap-1 items-center"
           style={selectionToolbarStyle}
         >
           <button
@@ -1335,7 +1489,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         />
       )}
 
-      {/* Helpful HUD Info */}
+      {/* HUD Info */}
       <div className="absolute bottom-4 left-4 pointer-events-none select-none text-xs font-semibold text-stone-500/80 bg-white/70 backdrop-blur-xs px-3 py-1.5 rounded-full border border-stone-200/50 shadow-xs flex items-center gap-2">
         <span>Zoom: {Math.round(zoom * 100)}%</span>
         <span className="w-1 h-1 bg-stone-300 rounded-full" />

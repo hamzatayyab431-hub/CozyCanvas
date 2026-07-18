@@ -11,6 +11,7 @@ export interface PlayerPresence {
   isHost: boolean;
   isDone?: boolean;
   joinedAt: string;
+  color: string;
 }
 
 export interface UseRoomRealtimeProps {
@@ -42,6 +43,29 @@ export const getOrCreatePlayerId = (): string => {
 export const getSavedNickname = (fallback = 'Painter'): string => {
   if (typeof window === 'undefined') return fallback;
   return localStorage.getItem('drawing_duel_nickname') || fallback;
+};
+
+// Helper to calculate a deterministic cozy player color
+export const getPlayerColor = (playerId: string): string => {
+  const colors = [
+    '#E05A47', // Terracotta
+    '#F4A261', // Peach
+    '#E9C46A', // Mustard
+    '#A2B18A', // Sage Green
+    '#4D908E', // Muted Teal
+    '#264653', // Deep Cozy Blue
+    '#A89FDF', // Lavender
+    '#9B2226', // Burgundy
+    '#8C6239', // Brown
+    '#3D2E2B', // Dark Chocolate
+  ];
+  if (!playerId) return colors[0];
+  let hash = 0;
+  for (let i = 0; i < playerId.length; i++) {
+    hash = playerId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
 };
 
 export const useRoomRealtime = ({
@@ -102,6 +126,7 @@ export const useRoomRealtime = ({
     isHost: false,
     isDone: false,
     joinedAt: new Date().toISOString(),
+    color: '#E05A47',
   });
 
   // Handle local storage synchronization for player ID and nickname
@@ -116,20 +141,32 @@ export const useRoomRealtime = ({
         localStorage.setItem('drawing_duel_nickname', savedName);
       }
 
-      presenceStateRef.current = {
+      const playerColor = getPlayerColor(pid);
+
+      const nextPresence = {
         playerId: pid,
         nickname: savedName,
-        isDrawing: false,
-        isTyping: false,
+        isDrawing: presenceStateRef.current.isDrawing,
+        isTyping: presenceStateRef.current.isTyping,
         isHost,
-        isDone: false,
-        joinedAt: new Date().toISOString(),
+        isDone: presenceStateRef.current.isDone,
+        joinedAt: presenceStateRef.current.playerId ? presenceStateRef.current.joinedAt : new Date().toISOString(),
+        color: playerColor,
       };
+
+      presenceStateRef.current = nextPresence;
+
+      // If already connected, track the new state immediately
+      if (channelRef.current && isJoined) {
+        channelRef.current.track(nextPresence).catch((err) => {
+          console.error('Failed to track updated presence:', err);
+        });
+      }
     });
-  }, [initialNickname, isHost]);
+  }, [initialNickname, isHost, isJoined]);
 
   // Update presence status (e.g. isDrawing, isTyping)
-  const updatePresence = useCallback(async (fields: Partial<Omit<PlayerPresence, 'playerId'>>) => {
+  const updatePresence = useCallback(async (fields: Partial<Omit<PlayerPresence, 'playerId' | 'color'>>) => {
     if (!channelRef.current || !playerId) return;
 
     const nextPresence = {
@@ -215,32 +252,35 @@ export const useRoomRealtime = ({
 
     channelRef.current = channel;
 
+    // Presence synchronizer helper
+    const syncPresence = () => {
+      const rawState = channel.presenceState();
+      const syncedPlayers: PlayerPresence[] = [];
+
+      Object.keys(rawState).forEach((key) => {
+        const presences = rawState[key] as unknown as PlayerPresence[];
+        if (presences && presences.length > 0) {
+          // Take the newest presence entry
+          const sorted = [...presences].sort(
+            (a, b) => new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime()
+          );
+          syncedPlayers.push(sorted[0]);
+        }
+      });
+
+      setPlayers(syncedPlayers);
+    };
+
     // 1. Presence Listeners
     channel
-      .on('presence', { event: 'sync' }, () => {
-        const rawState = channel.presenceState();
-        const syncedPlayers: PlayerPresence[] = [];
-
-        Object.keys(rawState).forEach((key) => {
-          const presences = rawState[key] as unknown as PlayerPresence[];
-          if (presences && presences.length > 0) {
-            // Take the newest presence entry
-            const sorted = [...presences].sort(
-              (a, b) => new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime()
-            );
-            syncedPlayers.push(sorted[0]);
-          }
-        });
-
-        setPlayers(syncedPlayers);
-      })
+      .on('presence', { event: 'sync' }, syncPresence)
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-        // Option to display join notifications
         console.log(`Player(s) joined:`, newPresences);
+        syncPresence();
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        // Option to display leave notifications
         console.log(`Player(s) left:`, leftPresences);
+        syncPresence();
       });
 
     // 2. Broadcast Listeners (Live canvas collaboration & draw status)
@@ -324,7 +364,15 @@ export const useRoomRealtime = ({
       }
     });
 
+    const handleBeforeUnload = () => {
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       channel.unsubscribe();
       setIsJoined(false);
       channelRef.current = null;

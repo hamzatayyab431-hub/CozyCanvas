@@ -121,6 +121,7 @@ export default function RoomPage({ params }: PageProps) {
 
   // 3. Realtime hooks integration
   const onDrawingReceivedCallbackRef = useRef<((payload: { element: any; playerId: string }) => void) | null>(null);
+  const onDrawingCompletedCallbackRef = useRef<((payload: { element: any; playerId: string }) => void) | null>(null);
   const onClearCanvasCallbackRef = useRef<(() => void) | null>(null);
   const onCursorMoveReceivedCallbackRef = useRef<((payload: { x: number; y: number; playerId: string }) => void) | null>(null);
 
@@ -130,6 +131,7 @@ export default function RoomPage({ params }: PageProps) {
     updatePresence,
     broadcastClearCanvas,
     broadcastStroke,
+    broadcastDrawingCompleted,
     broadcastCursor,
   } = useRoomRealtime({
     roomCode,
@@ -137,6 +139,7 @@ export default function RoomPage({ params }: PageProps) {
     initialNickname: savedName,
     isHost: room?.host_id === playerId,
     onDrawingReceived: (payload) => onDrawingReceivedCallbackRef.current?.(payload),
+    onDrawingCompleted: (payload) => onDrawingCompletedCallbackRef.current?.(payload),
     onClearCanvas: () => onClearCanvasCallbackRef.current?.(),
     onCursorMoveReceived: (payload) => onCursorMoveReceivedCallbackRef.current?.(payload),
     onRoomChange: (payload) => {
@@ -311,7 +314,7 @@ export default function RoomPage({ params }: PageProps) {
       </header>
 
       {/* Main Game Area */}
-      <main className="flex-1 w-full max-w-7xl mx-auto py-6 px-4 md:px-6">
+      <main className="flex-1 relative w-full overflow-hidden">
         {room && (
           <GameController
             room={room}
@@ -321,8 +324,10 @@ export default function RoomPage({ params }: PageProps) {
             updatePresence={updatePresence}
             broadcastClearCanvas={broadcastClearCanvas}
             broadcastStroke={broadcastStroke}
+            broadcastDrawingCompleted={broadcastDrawingCompleted}
             broadcastCursor={broadcastCursor}
             onDrawingReceivedCallbackRef={onDrawingReceivedCallbackRef}
+            onDrawingCompletedCallbackRef={onDrawingCompletedCallbackRef}
             onClearCanvasCallbackRef={onClearCanvasCallbackRef}
             onCursorMoveReceivedCallbackRef={onCursorMoveReceivedCallbackRef}
           />

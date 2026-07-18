@@ -736,3 +736,61 @@ export function drawElementWithSymmetry(
   }
 }
 
+/**
+ * Normalizes a coordinate relative to a client size into a standardized virtual bounds size.
+ */
+export function normalizeCoordinate(
+  val: number,
+  clientSize: number,
+  virtualSize: number = 1920
+): number {
+  if (clientSize === 0) return 0;
+  return (val / clientSize) * virtualSize;
+}
+
+/**
+ * Denormalizes a coordinate from a standardized virtual bounds size back to a client screen size.
+ */
+export function denormalizeCoordinate(
+  val: number,
+  clientSize: number,
+  virtualSize: number = 1920
+): number {
+  return (val / virtualSize) * clientSize;
+}
+
+/**
+ * Normalizes a Point from client canvas space to virtual bounds space.
+ */
+export function normalizePoint(
+  p: Point,
+  clientW: number,
+  clientH: number,
+  virtualW: number = 1920,
+  virtualH: number = 1080
+): Point {
+  return {
+    x: normalizeCoordinate(p.x, clientW, virtualW),
+    y: normalizeCoordinate(p.y, clientH, virtualH),
+    pressure: p.pressure,
+  };
+}
+
+/**
+ * Denormalizes a Point from virtual bounds space to client canvas space.
+ */
+export function denormalizePoint(
+  p: Point,
+  clientW: number,
+  clientH: number,
+  virtualW: number = 1920,
+  virtualH: number = 1080
+): Point {
+  return {
+    x: denormalizeCoordinate(p.x, clientW, virtualW),
+    y: denormalizeCoordinate(p.y, clientH, virtualH),
+    pressure: p.pressure,
+  };
+}
+
+
