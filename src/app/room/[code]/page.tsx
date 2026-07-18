@@ -136,8 +136,10 @@ export default function RoomPage({ params }: PageProps) {
   } = useRoomRealtime({
     roomCode,
     roomId: room?.id,
-    initialNickname: savedName,
-    isHost: room?.host_id === playerId,
+    // Use the confirmed nickname so the hook gets the real name from the start.
+    // Falls back to savedName (which is set from localStorage on mount).
+    initialNickname: nicknameConfirmed ? savedName : savedName,
+    isHost: !!(room && playerId && room.host_id === playerId),
     onDrawingReceived: (payload) => onDrawingReceivedCallbackRef.current?.(payload),
     onDrawingCompleted: (payload) => onDrawingCompletedCallbackRef.current?.(payload),
     onClearCanvas: () => onClearCanvasCallbackRef.current?.(),

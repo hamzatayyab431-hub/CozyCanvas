@@ -166,36 +166,39 @@ export const GameController: React.FC<GameControllerProps> = ({
   };
 
   // Bind Realtime Callbacks
+  // Strokes are always rendered on the receiver's canvas regardless of collab mode,
+  // so both players can see each other drawing in real time during a duel.
+  // collabMode only controls whether all players share the same editable canvas.
   useEffect(() => {
     if (onDrawingReceivedCallbackRef) {
       onDrawingReceivedCallbackRef.current = (payload) => {
-        if (room.settings?.collabMode && canvasRef.current) {
+        if (canvasRef.current) {
           canvasRef.current.updateExternalStroke(payload.playerId, payload.element);
         }
       };
     }
     if (onDrawingCompletedCallbackRef) {
       onDrawingCompletedCallbackRef.current = (payload) => {
-        if (room.settings?.collabMode && canvasRef.current) {
+        if (canvasRef.current) {
           canvasRef.current.addExternalElement(payload.element, payload.playerId);
         }
       };
     }
     if (onClearCanvasCallbackRef) {
       onClearCanvasCallbackRef.current = () => {
-        if (room.settings?.collabMode && canvasRef.current) {
+        if (canvasRef.current) {
           canvasRef.current.clear();
         }
       };
     }
     if (onCursorMoveReceivedCallbackRef) {
       onCursorMoveReceivedCallbackRef.current = (payload) => {
-        if (room.settings?.collabMode && canvasRef.current) {
+        if (canvasRef.current) {
           canvasRef.current.updateExternalCursor(payload.playerId, payload.x, payload.y);
         }
       };
     }
-  }, [onDrawingReceivedCallbackRef, onDrawingCompletedCallbackRef, onClearCanvasCallbackRef, onCursorMoveReceivedCallbackRef, room.settings?.collabMode]);
+  }, [onDrawingReceivedCallbackRef, onDrawingCompletedCallbackRef, onClearCanvasCallbackRef, onCursorMoveReceivedCallbackRef]);
 
   useEffect(() => {
     if (room.settings?.customPrompts) {
@@ -667,9 +670,9 @@ export const GameController: React.FC<GameControllerProps> = ({
         }
 
         // Reset presence done states
-        // In actual app, each client resets their own, but host updates db
-        // Broadcast clear canvas
+        // Broadcast clear canvas and also clear locally for the host
         broadcastClearCanvas();
+        canvasRef.current?.clear();
 
         // Create new round
         await supabase
@@ -1098,22 +1101,20 @@ export const GameController: React.FC<GameControllerProps> = ({
                 updatePresence({ isDrawing: true });
               }}
               onStrokeUpdate={(element) => {
-                if (room.settings?.collabMode) {
-                  broadcastStroke(element);
-                }
+                // Always broadcast live stroke previews so the opponent can
+                // see you drawing in real time, regardless of collab mode.
+                broadcastStroke(element);
               }}
               onStrokeComplete={(element) => {
-                if (room.settings?.collabMode) {
-                  broadcastDrawingCompleted(element);
-                }
+                // Always broadcast completed strokes for real-time sync.
+                broadcastDrawingCompleted(element);
               }}
               onCursorMove={(x, y) => {
-                if (room.settings?.collabMode) {
-                  const now = Date.now();
-                  if (now - lastCursorBroadcast.current > 50) {
-                    broadcastCursor(x, y);
-                    lastCursorBroadcast.current = now;
-                  }
+                // Always broadcast cursor position for live presence indicators.
+                const now = Date.now();
+                if (now - lastCursorBroadcast.current > 50) {
+                  broadcastCursor(x, y);
+                  lastCursorBroadcast.current = now;
                 }
               }}
               brushType={brushType}
