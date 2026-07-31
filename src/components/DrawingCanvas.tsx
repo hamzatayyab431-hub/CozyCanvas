@@ -1032,7 +1032,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       }
 
       if (tool === 'select') {
-        const currentElements = history[historyIndex] || [];
+        const local = history[historyIndex] || [];
+        const external = externalCommittedElementsRef.current;
+        const currentElements = [...local, ...external];
         if (selectedElementId) {
           const selected = currentElements.find((el) => el.id === selectedElementId);
           if (selected && isPointNearElement(virtualX, virtualY, selected)) {
