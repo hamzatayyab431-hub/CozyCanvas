@@ -229,7 +229,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const cursorCoordsRef = useRef<{ x: number; y: number } | null>(null);
   const externalActiveElementsRef = useRef<Map<string, DrawingElement>>(new Map());
   const externalCommittedElementsRef = useRef<DrawingElement[]>([]);
-  const externalCursorsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const externalCursorsRef = useRef<Map<string, { currentX: number; currentY: number; targetX: number; targetY: number }>>(new Map());
   
   const lastStrokeBroadcastTimeRef = useRef<number>(0);
 
@@ -573,15 +573,36 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       ctx.restore();
     }
 
-    // 9. Draw other users' cursors directly onto the canvas (no DOM re-renders)
-    externalCursorsRef.current.forEach((pos, pid) => {
+    // 9. Draw other users' cursors directly onto the canvas with smooth lerp interpolation
+    let needsNextCursorFrame = false;
+    externalCursorsRef.current.forEach((c, pid) => {
+      // Lerp current towards target (0.3 factor for smooth gliding)
+      const dx = c.targetX - c.currentX;
+      const dy = c.targetY - c.currentY;
+      if (Math.hypot(dx, dy) > 0.1) {
+        c.currentX += dx * 0.35;
+        c.currentY += dy * 0.35;
+        needsNextCursorFrame = true;
+      } else {
+        c.currentX = c.targetX;
+        c.currentY = c.targetY;
+      }
+
       const player = players.find((p) => p.playerId === pid);
       if (player) {
         const name = player.nickname || 'Painter';
         const color = player.color || '#E05A47';
-        drawCursor(ctx, pos.x, pos.y, name, color, zoom, pan, scaleX, scaleY, canvas.width, canvas.height);
+        drawCursor(ctx, c.currentX, c.currentY, name, color, zoom, pan, scaleX, scaleY, canvas.width, canvas.height);
       }
     });
+
+    if (needsNextCursorFrame && !drawRequestedRef.current) {
+      drawRequestedRef.current = true;
+      requestAnimationFrame(() => {
+        drawRequestedRef.current = false;
+        draw();
+      });
+    }
 
   }, [
     zoom,
@@ -908,9 +929,15 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       }
       requestDraw();
     },
-    // Track cursor movements of partners
+    // Track cursor movements of partners with lerp target positions
     updateExternalCursor: (playerId: string, x: number, y: number) => {
-      externalCursorsRef.current.set(playerId, { x, y });
+      const existing = externalCursorsRef.current.get(playerId);
+      if (!existing) {
+        externalCursorsRef.current.set(playerId, { currentX: x, currentY: y, targetX: x, targetY: y });
+      } else {
+        existing.targetX = x;
+        existing.targetY = y;
+      }
       requestDraw();
     },
     // Export complete state for late-joiners
