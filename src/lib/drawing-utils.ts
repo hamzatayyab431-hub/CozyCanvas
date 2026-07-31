@@ -704,34 +704,59 @@ export function isPointNearElement(
 export function drawElementWithSymmetry(
   ctx: CanvasRenderingContext2D,
   element: DrawingElement,
-  virtualWidth: number = 1600,
-  virtualHeight: number = 1200
+  virtualWidth: number = 1920,
+  virtualHeight: number = 1080
 ) {
   drawElement(ctx, element);
 
   const sym = element.symmetryMode || 'none';
   if (sym === 'vertical' || sym === 'both') {
     ctx.save();
-    ctx.translate(virtualWidth / 2, 0);
-    ctx.scale(-1, 1);
-    ctx.translate(-virtualWidth / 2, 0);
-    drawElement(ctx, element);
+    if (element.type === 'fill') {
+      const mirroredFill: FillElement = {
+        ...element,
+        x: virtualWidth - element.x,
+      };
+      drawElement(ctx, mirroredFill);
+    } else {
+      ctx.translate(virtualWidth / 2, 0);
+      ctx.scale(-1, 1);
+      ctx.translate(-virtualWidth / 2, 0);
+      drawElement(ctx, element);
+    }
     ctx.restore();
   }
   if (sym === 'horizontal' || sym === 'both') {
     ctx.save();
-    ctx.translate(0, virtualHeight / 2);
-    ctx.scale(1, -1);
-    ctx.translate(0, -virtualHeight / 2);
-    drawElement(ctx, element);
+    if (element.type === 'fill') {
+      const mirroredFill: FillElement = {
+        ...element,
+        y: virtualHeight - element.y,
+      };
+      drawElement(ctx, mirroredFill);
+    } else {
+      ctx.translate(0, virtualHeight / 2);
+      ctx.scale(1, -1);
+      ctx.translate(0, -virtualHeight / 2);
+      drawElement(ctx, element);
+    }
     ctx.restore();
   }
   if (sym === 'both') {
     ctx.save();
-    ctx.translate(virtualWidth / 2, virtualHeight / 2);
-    ctx.scale(-1, -1);
-    ctx.translate(-virtualWidth / 2, -virtualHeight / 2);
-    drawElement(ctx, element);
+    if (element.type === 'fill') {
+      const mirroredFill: FillElement = {
+        ...element,
+        x: virtualWidth - element.x,
+        y: virtualHeight - element.y,
+      };
+      drawElement(ctx, mirroredFill);
+    } else {
+      ctx.translate(virtualWidth / 2, virtualHeight / 2);
+      ctx.scale(-1, -1);
+      ctx.translate(-virtualWidth / 2, -virtualHeight / 2);
+      drawElement(ctx, element);
+    }
     ctx.restore();
   }
 }
