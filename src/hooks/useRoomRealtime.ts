@@ -202,7 +202,7 @@ export const useRoomRealtime = ({
       type: 'broadcast',
       event: 'stroke',
       payload: { element, playerId },
-    });
+    }).catch((err) => console.error('Failed to broadcast stroke:', err));
   }, [playerId]);
 
   const broadcastDrawingCompleted = useCallback((element: DrawingElement) => {
@@ -211,7 +211,7 @@ export const useRoomRealtime = ({
       type: 'broadcast',
       event: 'drawing_completed',
       payload: { element, playerId },
-    });
+    }).catch((err) => console.error('Failed to broadcast drawing completion:', err));
   }, [playerId]);
 
   const broadcastClearCanvas = useCallback(() => {
@@ -220,7 +220,7 @@ export const useRoomRealtime = ({
       type: 'broadcast',
       event: 'clear_canvas',
       payload: { playerId },
-    });
+    }).catch((err) => console.error('Failed to broadcast clear canvas:', err));
   }, [playerId]);
 
   const broadcastCursor = useCallback((x: number, y: number) => {
@@ -229,7 +229,16 @@ export const useRoomRealtime = ({
       type: 'broadcast',
       event: 'cursor_move',
       payload: { x, y, playerId },
-    });
+    }).catch((err) => console.error('Failed to broadcast cursor:', err));
+  }, [playerId]);
+
+  const broadcastDrawingState = useCallback((isDrawing: boolean) => {
+    if (!channelRef.current || !playerId) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'drawing_state',
+      payload: { playerId, isDrawing },
+    }).catch((err) => console.error('Failed to broadcast drawing state:', err));
   }, [playerId]);
 
   // Subscribe to Realtime channel — only depends on roomCode + playerId
@@ -333,6 +342,7 @@ export const useRoomRealtime = ({
 
     const handleBeforeUnload = () => {
       if (channelRef.current) {
+        channelRef.current.untrack();
         channelRef.current.unsubscribe();
       }
     };
@@ -351,7 +361,7 @@ export const useRoomRealtime = ({
   useEffect(() => {
     if (!roomId) return;
 
-    const channelName = `postgres:${roomCode.toUpperCase()}:${roomId}`;
+    const channelName = `postgres:${roomCode.toUpperCase()}:${roomId}-${Math.random().toString(36).substring(2, 9)}`;
     const pgChannel = supabase.channel(channelName);
 
     // Listen to room settings or status changes
@@ -405,5 +415,6 @@ export const useRoomRealtime = ({
     broadcastDrawingCompleted,
     broadcastClearCanvas,
     broadcastCursor,
+    broadcastDrawingState,
   };
 };
