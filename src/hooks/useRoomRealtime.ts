@@ -28,6 +28,9 @@ export interface UseRoomRealtimeProps {
   onCursorMoveReceived?: (payload: { x: number; y: number; playerId: string }) => void;
   onSyncRequest?: (payload: { requesterId: string }) => void;
   onFullSyncReceived?: (payload: { elements: DrawingElement[]; senderId: string }) => void;
+  onUndoReceived?: (payload: { playerId: string }) => void;
+  onRedoReceived?: (payload: { playerId: string }) => void;
+  onClearLayerReceived?: (payload: { layerId: string; playerId: string }) => void;
 }
 
 // Helper to generate/retrieve persistent player ID
@@ -103,6 +106,9 @@ export const useRoomRealtime = ({
   const onCursorMoveReceivedRef = useRef(onCursorMoveReceived);
   const onSyncRequestRef = useRef(onSyncRequest);
   const onFullSyncReceivedRef = useRef(onFullSyncReceived);
+  const onUndoReceivedRef = useRef(onUndoReceived);
+  const onRedoReceivedRef = useRef(onRedoReceived);
+  const onClearLayerReceivedRef = useRef(onClearLayerReceived);
 
   // Update refs when props change
   useEffect(() => {
@@ -115,6 +121,9 @@ export const useRoomRealtime = ({
     onCursorMoveReceivedRef.current = onCursorMoveReceived;
     onSyncRequestRef.current = onSyncRequest;
     onFullSyncReceivedRef.current = onFullSyncReceived;
+    onUndoReceivedRef.current = onUndoReceived;
+    onRedoReceivedRef.current = onRedoReceived;
+    onClearLayerReceivedRef.current = onClearLayerReceived;
   }, [
     onRoomChange,
     onRoundChange,
@@ -125,6 +134,9 @@ export const useRoomRealtime = ({
     onCursorMoveReceived,
     onSyncRequest,
     onFullSyncReceived,
+    onUndoReceived,
+    onRedoReceived,
+    onClearLayerReceived,
   ]);
 
   // Store presence status locally to allow easy partial updates
@@ -271,6 +283,33 @@ export const useRoomRealtime = ({
     }).catch((err) => console.error('Failed to broadcast full sync:', err));
   }, [playerId]);
 
+  const broadcastUndo = useCallback(() => {
+    if (!channelRef.current || !playerId) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'undo',
+      payload: { playerId },
+    }).catch((err) => console.error('Failed to broadcast undo:', err));
+  }, [playerId]);
+
+  const broadcastRedo = useCallback(() => {
+    if (!channelRef.current || !playerId) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'redo',
+      payload: { playerId },
+    }).catch((err) => console.error('Failed to broadcast redo:', err));
+  }, [playerId]);
+
+  const broadcastClearLayer = useCallback((layerId: string) => {
+    if (!channelRef.current || !playerId) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'clear_layer',
+      payload: { layerId, playerId },
+    }).catch((err) => console.error('Failed to broadcast clear layer:', err));
+  }, [playerId]);
+
   // Subscribe to Realtime channel — only depends on roomCode + playerId
   // NOT roomId, so the channel is not torn down when the room object loads.
   useEffect(() => {
@@ -359,6 +398,21 @@ export const useRoomRealtime = ({
       .on('broadcast', { event: 'full_sync' }, ({ payload }) => {
         if (payload.senderId !== playerId && onFullSyncReceivedRef.current) {
           onFullSyncReceivedRef.current(payload);
+        }
+      })
+      .on('broadcast', { event: 'undo' }, ({ payload }) => {
+        if (payload.playerId !== playerId && onUndoReceivedRef.current) {
+          onUndoReceivedRef.current(payload);
+        }
+      })
+      .on('broadcast', { event: 'redo' }, ({ payload }) => {
+        if (payload.playerId !== playerId && onRedoReceivedRef.current) {
+          onRedoReceivedRef.current(payload);
+        }
+      })
+      .on('broadcast', { event: 'clear_layer' }, ({ payload }) => {
+        if (payload.playerId !== playerId && onClearLayerReceivedRef.current) {
+          onClearLayerReceivedRef.current(payload);
         }
       });
 
@@ -458,5 +512,8 @@ export const useRoomRealtime = ({
     broadcastDrawingState,
     broadcastSyncRequest,
     broadcastFullSync,
+    broadcastUndo,
+    broadcastRedo,
+    broadcastClearLayer,
   };
 };
