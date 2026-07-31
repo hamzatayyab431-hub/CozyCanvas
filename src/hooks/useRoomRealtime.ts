@@ -87,6 +87,9 @@ export const useRoomRealtime = ({
   onCursorMoveReceived,
   onSyncRequest,
   onFullSyncReceived,
+  onUndoReceived,
+  onRedoReceived,
+  onClearLayerReceived,
 }: UseRoomRealtimeProps) => {
   const [playerId, setPlayerId] = useState<string>('');
   const [nickname, setNicknameState] = useState<string>('Painter');

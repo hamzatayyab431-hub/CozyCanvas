@@ -228,6 +228,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const activeElementRef = useRef<DrawingElement | null>(null);
   const cursorCoordsRef = useRef<{ x: number; y: number } | null>(null);
   const externalActiveElementsRef = useRef<Map<string, DrawingElement>>(new Map());
+  const lastExternalActiveStrokeTimeRef = useRef<Map<string, number>>(new Map());
   const externalCommittedElementsRef = useRef<DrawingElement[]>([]);
   const externalCursorsRef = useRef<Map<string, { currentX: number; currentY: number; targetX: number; targetY: number }>>(new Map());
   
@@ -446,6 +447,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
 
     // 3. Draw committed artwork + active strokes
+    const now = Date.now();
+    externalActiveElementsRef.current.forEach((_, pid) => {
+      const lastTime = lastExternalActiveStrokeTimeRef.current.get(pid) || 0;
+      const isPlayerPresent = players.some((p) => p.playerId === pid);
+      if (now - lastTime > 3000 || !isPlayerPresent) {
+        externalActiveElementsRef.current.delete(pid);
+        lastExternalActiveStrokeTimeRef.current.delete(pid);
+      }
+    });
+
     const currentActiveElement = activeElementRef.current;
     const hasExternalActive = externalActiveElementsRef.current.size > 0;
 
@@ -924,8 +935,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     updateExternalStroke: (playerId: string, element: DrawingElement | null) => {
       if (!element) {
         externalActiveElementsRef.current.delete(playerId);
+        lastExternalActiveStrokeTimeRef.current.delete(playerId);
       } else {
         externalActiveElementsRef.current.set(playerId, element);
+        lastExternalActiveStrokeTimeRef.current.set(playerId, Date.now());
       }
       requestDraw();
     },
