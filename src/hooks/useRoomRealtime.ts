@@ -82,6 +82,8 @@ export const useRoomRealtime = ({
   onClearCanvas,
   onDrawingStateChange,
   onCursorMoveReceived,
+  onSyncRequest,
+  onFullSyncReceived,
 }: UseRoomRealtimeProps) => {
   const [playerId, setPlayerId] = useState<string>('');
   const [nickname, setNicknameState] = useState<string>('Painter');
@@ -454,7 +456,6 @@ export const useRoomRealtime = ({
     broadcastClearCanvas,
     broadcastCursor,
     broadcastDrawingState,
-    broadcastSyncRequest,
     broadcastSyncRequest,
     broadcastFullSync,
   };

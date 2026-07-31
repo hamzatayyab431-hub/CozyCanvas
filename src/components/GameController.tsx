@@ -173,6 +173,9 @@ export const GameController: React.FC<GameControllerProps> = ({
     }
   };
 
+  // Stroke buffer to prevent dropped strokes if canvas is mounting
+  const strokeBufferRef = useRef<{ element: any; playerId: string }[]>([]);
+
   // Bind Realtime Callbacks
   // Strokes are always rendered on the receiver's canvas regardless of collab mode,
   // so both players can see each other drawing in real time during a duel.
@@ -189,9 +192,20 @@ export const GameController: React.FC<GameControllerProps> = ({
       onDrawingCompletedCallbackRef.current = (payload) => {
         if (canvasRef.current) {
           canvasRef.current.addExternalElement(payload.element, payload.playerId);
+        } else {
+          strokeBufferRef.current.push(payload);
         }
       };
     }
+    
+    // Flush buffered strokes when canvas mounts
+    if (canvasRef.current && strokeBufferRef.current.length > 0) {
+      strokeBufferRef.current.forEach((item) => {
+        canvasRef.current?.addExternalElement(item.element, item.playerId);
+      });
+      strokeBufferRef.current = [];
+    }
+
     if (onClearCanvasCallbackRef) {
       onClearCanvasCallbackRef.current = () => {
         if (canvasRef.current) {
@@ -206,7 +220,24 @@ export const GameController: React.FC<GameControllerProps> = ({
         }
       };
     }
-  }, [onDrawingReceivedCallbackRef, onDrawingCompletedCallbackRef, onClearCanvasCallbackRef, onCursorMoveReceivedCallbackRef]);
+    if (onSyncRequestCallbackRef) {
+      onSyncRequestCallbackRef.current = () => {
+        if (canvasRef.current && broadcastFullSync) {
+          const currentElements = canvasRef.current.exportFullState();
+          if (currentElements.length > 0) {
+            broadcastFullSync(currentElements);
+          }
+        }
+      };
+    }
+    if (onFullSyncReceivedCallbackRef) {
+      onFullSyncReceivedCallbackRef.current = (payload) => {
+        if (canvasRef.current && payload.elements) {
+          canvasRef.current.importFullState(payload.elements);
+        }
+      };
+    }
+  }, [onDrawingReceivedCallbackRef, onDrawingCompletedCallbackRef, onClearCanvasCallbackRef, onCursorMoveReceivedCallbackRef, onSyncRequestCallbackRef, onFullSyncReceivedCallbackRef, broadcastFullSync]);
 
   useEffect(() => {
     if (room.settings) {
