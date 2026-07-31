@@ -42,6 +42,8 @@ export interface DrawingCanvasRef {
   addExternalElement: (element: DrawingElement, playerId: string) => void;
   updateExternalStroke: (playerId: string, element: DrawingElement | null) => void;
   updateExternalCursor: (playerId: string, x: number, y: number) => void;
+  exportFullState: () => DrawingElement[];
+  importFullState: (elements: DrawingElement[]) => void;
 }
 
 export interface DrawingCanvasProps {
@@ -865,6 +867,18 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     // Track cursor movements of partners
     updateExternalCursor: (playerId: string, x: number, y: number) => {
       externalCursorsRef.current.set(playerId, { x, y });
+      requestDraw();
+    },
+    // Export complete state for late-joiners
+    exportFullState: () => {
+      const local = history[historyIndex] || [];
+      const external = externalCommittedElementsRef.current;
+      return [...local, ...external];
+    },
+    // Import complete state from room host or partner
+    importFullState: (elements: DrawingElement[]) => {
+      externalCommittedElementsRef.current = elements;
+      redrawOffscreen();
       requestDraw();
     }
   }), [zoom, pan, history, historyIndex, fitToScreen, exportPNG, redrawOffscreen, requestDraw]);

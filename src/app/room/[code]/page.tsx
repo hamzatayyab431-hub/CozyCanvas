@@ -124,6 +124,8 @@ export default function RoomPage({ params }: PageProps) {
   const onDrawingCompletedCallbackRef = useRef<((payload: { element: any; playerId: string }) => void) | null>(null);
   const onClearCanvasCallbackRef = useRef<(() => void) | null>(null);
   const onCursorMoveReceivedCallbackRef = useRef<((payload: { x: number; y: number; playerId: string }) => void) | null>(null);
+  const onSyncRequestCallbackRef = useRef<((payload: { requesterId: string }) => void) | null>(null);
+  const onFullSyncReceivedCallbackRef = useRef<((payload: { elements: any[]; senderId: string }) => void) | null>(null);
 
   const {
     players,
@@ -133,6 +135,8 @@ export default function RoomPage({ params }: PageProps) {
     broadcastStroke,
     broadcastDrawingCompleted,
     broadcastCursor,
+    broadcastSyncRequest,
+    broadcastFullSync,
   } = useRoomRealtime({
     roomCode,
     roomId: room?.id,
@@ -144,6 +148,8 @@ export default function RoomPage({ params }: PageProps) {
     onDrawingCompleted: (payload) => onDrawingCompletedCallbackRef.current?.(payload),
     onClearCanvas: () => onClearCanvasCallbackRef.current?.(),
     onCursorMoveReceived: (payload) => onCursorMoveReceivedCallbackRef.current?.(payload),
+    onSyncRequest: (payload) => onSyncRequestCallbackRef.current?.(payload),
+    onFullSyncReceived: (payload) => onFullSyncReceivedCallbackRef.current?.(payload),
     onRoomChange: (payload) => {
       if (payload.new) {
         setRoom(payload.new as unknown as Room);
@@ -328,10 +334,14 @@ export default function RoomPage({ params }: PageProps) {
             broadcastStroke={broadcastStroke}
             broadcastDrawingCompleted={broadcastDrawingCompleted}
             broadcastCursor={broadcastCursor}
+            broadcastSyncRequest={broadcastSyncRequest}
+            broadcastFullSync={broadcastFullSync}
             onDrawingReceivedCallbackRef={onDrawingReceivedCallbackRef}
             onDrawingCompletedCallbackRef={onDrawingCompletedCallbackRef}
             onClearCanvasCallbackRef={onClearCanvasCallbackRef}
             onCursorMoveReceivedCallbackRef={onCursorMoveReceivedCallbackRef}
+            onSyncRequestCallbackRef={onSyncRequestCallbackRef}
+            onFullSyncReceivedCallbackRef={onFullSyncReceivedCallbackRef}
           />
         )}
       </main>

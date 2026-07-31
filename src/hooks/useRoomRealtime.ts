@@ -26,6 +26,8 @@ export interface UseRoomRealtimeProps {
   onClearCanvas?: () => void;
   onDrawingStateChange?: (payload: { playerId: string; isDrawing: boolean }) => void;
   onCursorMoveReceived?: (payload: { x: number; y: number; playerId: string }) => void;
+  onSyncRequest?: (payload: { requesterId: string }) => void;
+  onFullSyncReceived?: (payload: { elements: DrawingElement[]; senderId: string }) => void;
 }
 
 // Helper to generate/retrieve persistent player ID
@@ -97,6 +99,8 @@ export const useRoomRealtime = ({
   const onClearCanvasRef = useRef(onClearCanvas);
   const onDrawingStateChangeRef = useRef(onDrawingStateChange);
   const onCursorMoveReceivedRef = useRef(onCursorMoveReceived);
+  const onSyncRequestRef = useRef(onSyncRequest);
+  const onFullSyncReceivedRef = useRef(onFullSyncReceived);
 
   // Update refs when props change
   useEffect(() => {
@@ -107,6 +111,8 @@ export const useRoomRealtime = ({
     onClearCanvasRef.current = onClearCanvas;
     onDrawingStateChangeRef.current = onDrawingStateChange;
     onCursorMoveReceivedRef.current = onCursorMoveReceived;
+    onSyncRequestRef.current = onSyncRequest;
+    onFullSyncReceivedRef.current = onFullSyncReceived;
   }, [
     onRoomChange,
     onRoundChange,
@@ -115,8 +121,10 @@ export const useRoomRealtime = ({
     onClearCanvas,
     onDrawingStateChange,
     onCursorMoveReceived,
+    onSyncRequest,
+    onFullSyncReceived,
   ]);
-  
+
   // Store presence status locally to allow easy partial updates
   const presenceStateRef = useRef<PlayerPresence>({
     playerId: '',
@@ -177,12 +185,14 @@ export const useRoomRealtime = ({
 
     presenceStateRef.current = nextPresence;
 
-    try {
-      await channelRef.current.track(nextPresence);
-    } catch (err) {
-      console.error('Failed to update presence state:', err);
+    if (isJoined) {
+      try {
+        await channelRef.current.track(nextPresence);
+      } catch (err) {
+        console.error('Failed to update presence state:', err);
+      }
     }
-  }, [playerId]);
+  }, [playerId, isJoined]);
 
   // Update nickname and sync with presence
   const setNickname = useCallback((newName: string) => {
@@ -239,6 +249,24 @@ export const useRoomRealtime = ({
       event: 'drawing_state',
       payload: { playerId, isDrawing },
     }).catch((err) => console.error('Failed to broadcast drawing state:', err));
+  }, [playerId]);
+
+  const broadcastSyncRequest = useCallback(() => {
+    if (!channelRef.current || !playerId) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'sync_request',
+      payload: { requesterId: playerId },
+    }).catch((err) => console.error('Failed to broadcast sync request:', err));
+  }, [playerId]);
+
+  const broadcastFullSync = useCallback((elements: DrawingElement[]) => {
+    if (!channelRef.current || !playerId) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'full_sync',
+      payload: { elements, senderId: playerId },
+    }).catch((err) => console.error('Failed to broadcast full sync:', err));
   }, [playerId]);
 
   // Subscribe to Realtime channel — only depends on roomCode + playerId
@@ -319,6 +347,16 @@ export const useRoomRealtime = ({
       .on('broadcast', { event: 'cursor_move' }, ({ payload }) => {
         if (payload.playerId !== playerId && onCursorMoveReceivedRef.current) {
           onCursorMoveReceivedRef.current(payload);
+        }
+      })
+      .on('broadcast', { event: 'sync_request' }, ({ payload }) => {
+        if (payload.requesterId !== playerId && onSyncRequestRef.current) {
+          onSyncRequestRef.current(payload);
+        }
+      })
+      .on('broadcast', { event: 'full_sync' }, ({ payload }) => {
+        if (payload.senderId !== playerId && onFullSyncReceivedRef.current) {
+          onFullSyncReceivedRef.current(payload);
         }
       });
 
@@ -416,5 +454,8 @@ export const useRoomRealtime = ({
     broadcastClearCanvas,
     broadcastCursor,
     broadcastDrawingState,
+    broadcastSyncRequest,
+    broadcastSyncRequest,
+    broadcastFullSync,
   };
 };

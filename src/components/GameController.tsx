@@ -71,10 +71,14 @@ interface GameControllerProps {
   broadcastStroke: (element: any) => void;
   broadcastDrawingCompleted: (element: any) => void;
   broadcastCursor: (x: number, y: number) => void;
+  broadcastSyncRequest?: () => void;
+  broadcastFullSync?: (elements: any[]) => void;
   onDrawingReceivedCallbackRef?: React.MutableRefObject<((payload: { element: any; playerId: string }) => void) | null>;
   onDrawingCompletedCallbackRef?: React.MutableRefObject<((payload: { element: any; playerId: string }) => void) | null>;
   onClearCanvasCallbackRef?: React.MutableRefObject<(() => void) | null>;
   onCursorMoveReceivedCallbackRef?: React.MutableRefObject<((payload: { x: number; y: number; playerId: string }) => void) | null>;
+  onSyncRequestCallbackRef?: React.MutableRefObject<((payload: { requesterId: string }) => void) | null>;
+  onFullSyncReceivedCallbackRef?: React.MutableRefObject<((payload: { elements: any[]; senderId: string }) => void) | null>;
 }
 
 export const GameController: React.FC<GameControllerProps> = ({
@@ -87,10 +91,14 @@ export const GameController: React.FC<GameControllerProps> = ({
   broadcastStroke,
   broadcastDrawingCompleted,
   broadcastCursor,
+  broadcastSyncRequest,
+  broadcastFullSync,
   onDrawingReceivedCallbackRef,
   onDrawingCompletedCallbackRef,
   onClearCanvasCallbackRef,
   onCursorMoveReceivedCallbackRef,
+  onSyncRequestCallbackRef,
+  onFullSyncReceivedCallbackRef,
 }) => {
   const isHost = room.host_id === playerId;
 
