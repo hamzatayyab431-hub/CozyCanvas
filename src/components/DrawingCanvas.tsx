@@ -336,7 +336,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
   }, [canvasSize, fitToScreen]);
 
-  // Redraw elements on the offscreen canvas sorted by layers
+  // Redraw elements on offscreen layer canvases to isolate layer erasers and prevent cross-layer destruction
   const redrawOffscreen = useCallback(() => {
     const canvas = offscreenCanvasRef.current;
     if (!canvas) return;
@@ -354,6 +354,13 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const allElements = [...localElements, ...externalElements];
     const layerOrder: ('background' | 'sketch' | 'details')[] = ['background', 'sketch', 'details'];
     
+    // Temporary layer canvas to isolate destination-out (eraser) operations per layer
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = VIRTUAL_WIDTH;
+    tempCanvas.height = VIRTUAL_HEIGHT;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
     for (const layerId of layerOrder) {
       const layerConf = layers.find((l) => l.id === layerId);
       if (!layerConf || !layerConf.visible) continue;
@@ -362,17 +369,38 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         (el) => (el.layerId || 'sketch') === layerId
       );
 
+      if (layerElements.length === 0) continue;
+
+      // Clear temp layer canvas
+      tempCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
       for (const element of layerElements) {
         const clonedElement = {
           ...element,
           opacity: element.opacity * layerConf.opacity,
         };
-        ctx.save();
-        drawElementWithSymmetry(ctx, clonedElement, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-        ctx.restore();
+        tempCtx.save();
+        drawElementWithSymmetry(tempCtx, clonedElement, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        tempCtx.restore();
       }
+
+      // Composite isolated layer onto main offscreen canvas
+      ctx.save();
+      ctx.globalAlpha = 1.0;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(tempCanvas, 0, 0);
+      ctx.restore();
     }
   }, [history, historyIndex, layers]);
+
+  // Active strokes buffer canvas to prevent erasers from punching holes in backdrop/grid/sheet
+  const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  if (!activeCanvasRef.current && typeof document !== 'undefined') {
+    const c = document.createElement('canvas');
+    c.width = VIRTUAL_WIDTH;
+    c.height = VIRTUAL_HEIGHT;
+    activeCanvasRef.current = c;
+  }
 
   // Render everything to the visible canvas
   const draw = useCallback(() => {
@@ -417,49 +445,65 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       ctx.restore();
     }
 
-    // 3. Draw offscreen committed layers contents
-    ctx.save();
-    ctx.translate(pan.x, pan.y);
-    ctx.scale(zoom, zoom);
-    ctx.scale(scaleX, scaleY);
-    if (offscreenCanvasRef.current) {
-      ctx.drawImage(offscreenCanvasRef.current, 0, 0);
-    }
-    ctx.restore();
-
-    // 4. Draw active stroke / shape (local user drawing in-progress)
+    // 3. Draw committed artwork + active strokes
     const currentActiveElement = activeElementRef.current;
-    if (currentActiveElement) {
-      const layerConf = layers.find((l) => l.id === activeLayerId);
-      if (layerConf && layerConf.visible) {
-        const clonedActive = {
-          ...currentActiveElement,
-          opacity: currentActiveElement.opacity * layerConf.opacity,
-        };
+    const hasExternalActive = externalActiveElementsRef.current.size > 0;
+
+    if ((currentActiveElement || hasExternalActive) && activeCanvasRef.current) {
+      const actCanvas = activeCanvasRef.current;
+      const actCtx = actCanvas.getContext('2d');
+      if (actCtx) {
+        actCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        if (offscreenCanvasRef.current) {
+          actCtx.drawImage(offscreenCanvasRef.current, 0, 0);
+        }
+
+        // Draw local active stroke
+        if (currentActiveElement) {
+          const layerConf = layers.find((l) => l.id === activeLayerId);
+          if (layerConf && layerConf.visible) {
+            const clonedActive = {
+              ...currentActiveElement,
+              opacity: currentActiveElement.opacity * layerConf.opacity,
+            };
+            actCtx.save();
+            drawElementWithSymmetry(actCtx, clonedActive, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+            actCtx.restore();
+          }
+        }
+
+        // Draw active strokes of other collaborative users
+        externalActiveElementsRef.current.forEach((el) => {
+          const layerConf = layers.find((l) => l.id === (el.layerId || 'sketch'));
+          if (!layerConf || !layerConf.visible) return;
+          const clonedActive = {
+            ...el,
+            opacity: el.opacity * layerConf.opacity,
+          };
+          actCtx.save();
+          drawElementWithSymmetry(actCtx, clonedActive, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+          actCtx.restore();
+        });
+
+        // Composite activeCanvasRef onto main visible canvas
         ctx.save();
         ctx.translate(pan.x, pan.y);
         ctx.scale(zoom, zoom);
         ctx.scale(scaleX, scaleY);
-        drawElementWithSymmetry(ctx, clonedActive, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        ctx.drawImage(actCanvas, 0, 0);
         ctx.restore();
       }
-    }
-
-    // 5. Draw active strokes of other collaborative users
-    externalActiveElementsRef.current.forEach((el) => {
-      const layerConf = layers.find((l) => l.id === (el.layerId || 'sketch'));
-      if (!layerConf || !layerConf.visible) return;
-      const clonedActive = {
-        ...el,
-        opacity: el.opacity * layerConf.opacity,
-      };
+    } else {
+      // No active strokes in progress, draw committed offscreen directly
       ctx.save();
       ctx.translate(pan.x, pan.y);
       ctx.scale(zoom, zoom);
       ctx.scale(scaleX, scaleY);
-      drawElementWithSymmetry(ctx, clonedActive, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+      if (offscreenCanvasRef.current) {
+        ctx.drawImage(offscreenCanvasRef.current, 0, 0);
+      }
       ctx.restore();
-    });
+    }
 
     // 6. Draw grid guides
     if (gridVisible && gridSize > 5) {
