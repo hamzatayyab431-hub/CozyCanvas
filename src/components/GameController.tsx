@@ -209,10 +209,16 @@ export const GameController: React.FC<GameControllerProps> = ({
   }, [onDrawingReceivedCallbackRef, onDrawingCompletedCallbackRef, onClearCanvasCallbackRef, onCursorMoveReceivedCallbackRef]);
 
   useEffect(() => {
-    if (room.settings?.customPrompts) {
-      setCustomPromptsText(room.settings.customPrompts.join('\n'));
+    if (room.settings) {
+      setMaxRounds(room.settings.maxRounds ?? 3);
+      setRoundDuration(room.settings.roundDuration ?? 60);
+      setCategory(room.settings.category ?? 'all');
+      setCollabMode(room.settings.collabMode ?? false);
+      if (room.settings.customPrompts) {
+        setCustomPromptsText(room.settings.customPrompts.join('\n'));
+      }
     }
-  }, [room.settings?.customPrompts]);
+  }, [room.settings]);
 
 
 
@@ -337,7 +343,7 @@ export const GameController: React.FC<GameControllerProps> = ({
 
   // Submit Drawing Action
   const submitDrawing = useCallback(async () => {
-    if (!currentRound || hasSubmitted || isSubmitting) return;
+    if (!currentRound || hasSubmitted || isSubmitting || room.settings?.collabMode) return;
 
     if (!canvasRef.current) {
       console.warn('Canvas reference is not available yet.');
@@ -372,31 +378,24 @@ export const GameController: React.FC<GameControllerProps> = ({
         .from('drawings')
         .getPublicUrl(filename);
 
-      // Insert/Upsert into drawings table
+      // Insert into drawings table
       const { error: dbError } = await supabase
         .from('drawings')
-        .upsert({
+        .insert({
           room_id: room.id,
           round_id: currentRound.id,
           player_id: playerId,
           player_name: nickname,
-          canvas_data: { elements: [] }, // Placeholder
+          canvas_data: { elements: [] },
           image_url: publicUrl,
-        }, {
-          onConflict: 'room_id,round_id,player_id'
         });
 
       if (dbError) {
         throw dbError;
       }
 
-      // Update Presence done status
-      await updatePresence({ isDone: true, isDrawing: false });
-
-      // Play pop sound
-      playPop();
-
-      // Trigger visual confetti for the self-completion
+      // Trigger confetti and update presence
+      updatePresence({ isDone: true });
       confetti({
         particleCount: 40,
         spread: 40,
@@ -409,7 +408,7 @@ export const GameController: React.FC<GameControllerProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [currentRound, hasSubmitted, isSubmitting, room.id, playerId, nickname, updatePresence]);
+  }, [currentRound, hasSubmitted, isSubmitting, room.id, room.settings?.collabMode, playerId, nickname, updatePresence]);
 
   // Finish Collaboration Action
   const finishCollaboration = useCallback(async () => {
@@ -456,6 +455,12 @@ export const GameController: React.FC<GameControllerProps> = ({
         });
 
       if (dbError) throw dbError;
+
+      // Update round status to completed
+      await supabase
+        .from('rounds')
+        .update({ status: 'completed' })
+        .eq('id', currentRound.id);
 
       // Finish room immediately
       await supabase
