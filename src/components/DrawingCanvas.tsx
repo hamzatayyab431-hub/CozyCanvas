@@ -638,15 +638,25 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   ]);
 
   // Request high performance draw scheduling via rAF
+  const rafIdRef = useRef<number | null>(null);
   const drawRequestedRef = useRef(false);
   const requestDraw = useCallback(() => {
     if (drawRequestedRef.current) return;
     drawRequestedRef.current = true;
-    requestAnimationFrame(() => {
+    rafIdRef.current = requestAnimationFrame(() => {
       drawRequestedRef.current = false;
       draw();
     });
   }, [draw]);
+
+  // Clean up animation frame handles on unmount
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, []);
 
   // Keep drawing up-to-date
   useEffect(() => {
