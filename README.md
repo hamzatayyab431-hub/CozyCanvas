@@ -28,6 +28,8 @@ Built with **Next.js 16 (App Router)**, **TypeScript**, **Tailwind CSS 4**, and 
 Ensure you have **Node.js 18+** installed.
 
 ### 2. Set Up Supabase
+### 3. Vercel Deployment Note
+This application uses Next.js 16 App Router with dynamic room routes (`/room/[code]`). Make sure to set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your Vercel Project Environment Variables. All dynamic room routes are configured with `force-dynamic` for seamless serverless deployment.
 1. Create a new project on [Supabase](https://supabase.com/).
 2. Open the **SQL Editor** in your Supabase dashboard and run the contents of the `schema.sql` file (found at the root of this project). This creates the `rooms`, `rounds`, and `drawings` tables, sets up Row-Level Security (RLS) policies, and configures the Realtime publication.
 3. Go to **Storage** in Supabase and create a new bucket named `drawings`. Ensure its access level is set to **Public** so that players can fetch drawings.
