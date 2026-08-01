@@ -927,13 +927,15 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     // Append completed collaborative stroke to the external ref (no stale closure risk)
     addExternalElement: (element: DrawingElement, _playerId: string) => {
       externalActiveElementsRef.current.delete(_playerId);
-      externalCommittedElementsRef.current = [...externalCommittedElementsRef.current, element];
-      redrawOffscreen();
-      requestDraw();
+      if (element && element.type && element.id) {
+        externalCommittedElementsRef.current = [...externalCommittedElementsRef.current, element];
+        redrawOffscreen();
+        requestDraw();
+      }
     },
     // Draw real-time temporary stroke coordinates
     updateExternalStroke: (playerId: string, element: DrawingElement | null) => {
-      if (!element) {
+      if (!element || !element.type) {
         externalActiveElementsRef.current.delete(playerId);
         lastExternalActiveStrokeTimeRef.current.delete(playerId);
       } else {
