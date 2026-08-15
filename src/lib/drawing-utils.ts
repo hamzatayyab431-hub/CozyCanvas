@@ -94,6 +94,42 @@ export type DrawingElement =
   | StampElement;
 
 /**
+ * Type guard for FreehandElement ('pen' or 'eraser')
+ */
+export function isFreehandElement(el: DrawingElement): el is FreehandElement {
+  return el.type === 'pen' || el.type === 'eraser';
+}
+
+/**
+ * Type guard for ShapeElement ('line', 'circle', 'rectangle', 'triangle')
+ */
+export function isShapeElement(el: DrawingElement): el is ShapeElement {
+  return el.type === 'line' || el.type === 'circle' || el.type === 'rectangle' || el.type === 'triangle';
+}
+
+/**
+ * Type guard for TextElement
+ */
+export function isTextElement(el: DrawingElement): el is TextElement {
+  return el.type === 'text';
+}
+
+/**
+ * Type guard for StampElement
+ */
+export function isStampElement(el: DrawingElement): el is StampElement {
+  return el.type === 'stamp';
+}
+
+/**
+ * Type guard for FillElement
+ */
+export function isFillElement(el: DrawingElement): el is FillElement {
+  return el.type === 'fill';
+}
+
+
+/**
  * Converts stroke outline points from perfect-freehand to an SVG path string.
  */
 export function getSvgPathFromStroke(stroke: number[][]): string {
@@ -252,6 +288,23 @@ export function floodFill(
   }
 
   ctx.putImageData(imageData, 0, 0);
+}
+
+/**
+ * Helper to apply line dash patterns to the canvas context based on StrokeDashStyle.
+ */
+export function applyStrokeDash(
+  ctx: CanvasRenderingContext2D,
+  style?: StrokeDashStyle,
+  strokeWidth = 2
+) {
+  if (style === 'dashed') {
+    ctx.setLineDash([Math.max(6, strokeWidth * 2.5), Math.max(4, strokeWidth * 1.5)]);
+  } else if (style === 'dotted') {
+    ctx.setLineDash([Math.max(2, strokeWidth * 0.8), Math.max(4, strokeWidth * 1.2)]);
+  } else {
+    ctx.setLineDash([]);
+  }
 }
 
 /**
@@ -425,23 +478,6 @@ export function drawElement(ctx: CanvasRenderingContext2D, element: DrawingEleme
       ctx.restore();
       break;
     }
-
-/**
- * Helper to apply line dash patterns to the canvas context based on StrokeDashStyle.
- */
-export function applyStrokeDash(
-  ctx: CanvasRenderingContext2D,
-  style?: StrokeDashStyle,
-  strokeWidth = 2
-) {
-  if (style === 'dashed') {
-    ctx.setLineDash([Math.max(6, strokeWidth * 2.5), Math.max(4, strokeWidth * 1.5)]);
-  } else if (style === 'dotted') {
-    ctx.setLineDash([Math.max(2, strokeWidth * 0.8), Math.max(4, strokeWidth * 1.2)]);
-  } else {
-    ctx.setLineDash([]);
-  }
-}
 
     case 'line': {
       ctx.save();
