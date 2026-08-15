@@ -204,3 +204,39 @@ body {
 .delay-200 { animation-delay: 200ms; }
 .delay-300 { animation-delay: 300ms; }
 
+/* Custom cozy rounded scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--cozy-border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cozy-primary);
+  opacity: 0.7;
+}
+
+/* Accessible focus ring */
+:focus-visible {
+  outline: 2px solid var(--cozy-primary);
+  outline-offset: 2px;
+}
+
+/* Glassmorphic card surface */
+.cozy-glass {
+  background: rgba(243, 229, 216, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.dark .cozy-glass {
+  background: rgba(43, 29, 32, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+
