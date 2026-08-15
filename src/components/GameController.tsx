@@ -1415,11 +1415,16 @@ export const GameController: React.FC<GameControllerProps> = ({
                   }`}
                 >
                   {/* Artist Tag */}
-                  <div className="flex justify-between items-center font-serif">
-                    <span className="font-bold text-cozy-fg text-sm flex items-center gap-1">
-                      {player.nickname}
-                      {isMyDrawing && <span className="text-[9px] font-bold text-white bg-cozy-primary px-1 rounded-sm ml-1">You</span>}
-                    </span>
+                  <div className="flex justify-between items-center font-serif flex-wrap gap-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-cozy-fg text-sm flex items-center gap-1">
+                        {player.nickname}
+                        {isMyDrawing && <span className="text-[9px] font-bold text-white bg-cozy-primary px-1 rounded-sm ml-1">You</span>}
+                      </span>
+                      <span className="text-[9px] font-sans font-medium text-cozy-primary bg-cozy-primary/10 px-1.5 py-0.5 rounded-full">
+                        {['✨ Masterpiece Maestro', '🎨 Palette Virtuoso', '🪄 Whimsical Dreamer', '🌟 Creative Ace', '💖 Heartfelt Artist'][(player.nickname.length + currentRound.round_number) % 5]}
+                      </span>
+                    </div>
                     {player.isHost && <Crown size={12} className="text-cozy-primary fill-cozy-secondary/50 stroke-cozy-primary" />}
                   </div>
 
