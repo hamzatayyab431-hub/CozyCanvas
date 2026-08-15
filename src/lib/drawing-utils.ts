@@ -939,5 +939,86 @@ export function drawPolygonPath(
   ctx.closePath();
 }
 
+/**
+ * Converts drawing elements into a standalone scalable SVG document string.
+ */
+export function exportCanvasToSVG(
+  elements: DrawingElement[],
+  width = 1920,
+  height = 1080,
+  backgroundColor = '#fffbf0'
+): string {
+  let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">\n`;
+  svgContent += `  <rect width="${width}" height="${height}" fill="${backgroundColor}" />\n`;
 
+  for (const el of elements) {
+    if (el.type === 'pen') {
+      if (el.points.length === 0) continue;
+      const strokePoints = getStroke(el.points, {
+        size: el.size,
+        thinning: 0.5,
+        smoothing: 0.5,
+        streamline: 0.5,
+      });
+      const d = getSvgPathFromStroke(strokePoints);
+      if (d) {
+        svgContent += `  <path d="${d}" fill="${el.color}" fill-opacity="${el.opacity}" />\n`;
+      }
+    } else if (el.type === 'line') {
+      const dashAttr = el.strokeDash === 'dashed' ? ' stroke-dasharray="10,6"' : el.strokeDash === 'dotted' ? ' stroke-dasharray="3,5"' : '';
+      svgContent += `  <line x1="${el.startX}" y1="${el.startY}" x2="${el.endX}" y2="${el.endY}" stroke="${el.color}" stroke-width="${el.size}" stroke-opacity="${el.opacity}" stroke-linecap="round"${dashAttr} />\n`;
+    } else if (el.type === 'rectangle') {
+      const rx = Math.min(el.startX, el.endX);
+      const ry = Math.min(el.startY, el.endY);
+      const rw = Math.abs(el.endX - el.startX);
+      const rh = Math.abs(el.endY - el.startY);
+      if (el.fill) {
+        svgContent += `  <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="${el.color}" fill-opacity="${el.opacity}" />\n`;
+      } else {
+        const dashAttr = el.strokeDash === 'dashed' ? ' stroke-dasharray="10,6"' : el.strokeDash === 'dotted' ? ' stroke-dasharray="3,5"' : '';
+        svgContent += `  <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="none" stroke="${el.color}" stroke-width="${el.size}" stroke-opacity="${el.opacity}"${dashAttr} />\n`;
+      }
+    } else if (el.type === 'circle') {
+      const rx = Math.abs(el.endX - el.startX) / 2;
+      const ry = Math.abs(el.endY - el.startY) / 2;
+      const cx = Math.min(el.startX, el.endX) + rx;
+      const cy = Math.min(el.startY, el.endY) + ry;
+      if (el.fill) {
+        svgContent += `  <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${el.color}" fill-opacity="${el.opacity}" />\n`;
+      } else {
+        const dashAttr = el.strokeDash === 'dashed' ? ' stroke-dasharray="10,6"' : el.strokeDash === 'dotted' ? ' stroke-dasharray="3,5"' : '';
+        svgContent += `  <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="${el.color}" stroke-width="${el.size}" stroke-opacity="${el.opacity}"${dashAttr} />\n`;
+      }
+    } else if (el.type === 'text') {
+      svgContent += `  <text x="${el.x}" y="${el.y + el.size}" font-family="sans-serif" font-size="${el.size}" fill="${el.color}" fill-opacity="${el.opacity}">${el.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text>\n`;
+    } else if (el.type === 'stamp') {
+      svgContent += `  <text x="${el.x}" y="${el.y}" text-anchor="middle" dominant-baseline="central" font-size="${el.size}">${el.emoji}</text>\n`;
+    }
+  }
 
+  svgContent += `</svg>`;
+  return svgContent;
+}
+
+/**
+ * Triggers a browser download for a given Blob or DataURL with a specified filename.
+ */
+export function downloadFile(content: Blob | string, filename: string) {
+  if (typeof window === 'undefined') return;
+  const link = document.createElement('a');
+  link.download = filename;
+
+  if (typeof content === 'string') {
+    link.href = content;
+  } else {
+    link.href = URL.createObjectURL(content);
+  }
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  if (typeof content !== 'string') {
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+}
