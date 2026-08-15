@@ -2,11 +2,29 @@
 
 import React from 'react';
 import { PlayerPresence } from '../hooks/useRoomRealtime';
-import { Crown, CheckCircle2, Paintbrush, User, Loader2 } from 'lucide-react';
+import { Crown, CheckCircle2, Paintbrush, User, Loader2, Wifi } from 'lucide-react';
 
 interface RoomPresenceProps {
   players: PlayerPresence[];
   currentPlayerId: string;
+}
+
+// Generate consistent avatar pastel colors from nickname
+function getAvatarBg(name: string): string {
+  const colors = [
+    'bg-rose-100 text-rose-700 border-rose-200',
+    'bg-amber-100 text-amber-700 border-amber-200',
+    'bg-emerald-100 text-emerald-700 border-emerald-200',
+    'bg-teal-100 text-teal-700 border-teal-200',
+    'bg-sky-100 text-sky-700 border-sky-200',
+    'bg-indigo-100 text-indigo-700 border-indigo-200',
+    'bg-purple-100 text-purple-700 border-purple-200',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
 }
 
 export const RoomPresence: React.FC<RoomPresenceProps> = ({
@@ -29,12 +47,16 @@ export const RoomPresence: React.FC<RoomPresenceProps> = ({
           <User size={16} className="text-cozy-primary" />
           Players In Room ({players.length})
         </h3>
-        <span className="h-2 w-2 bg-cozy-primary rounded-full animate-pulse" title="Connected" />
+        <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full" title="Realtime Sync Active">
+          <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse" />
+          <span>Live</span>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
         {sortedPlayers.map((player) => {
           const isMe = player.playerId === currentPlayerId;
+          const avatarStyle = getAvatarBg(player.nickname);
           
           return (
             <div
@@ -46,10 +68,8 @@ export const RoomPresence: React.FC<RoomPresenceProps> = ({
               }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className={`p-2 rounded-lg ${
-                  isMe ? 'bg-cozy-card text-cozy-primary border border-cozy-primary/30' : 'bg-cozy-bg text-cozy-muted border border-cozy-border'
-                }`}>
-                  <User size={14} />
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center font-bold text-xs border ${avatarStyle}`}>
+                  {player.nickname ? player.nickname.slice(0, 2).toUpperCase() : '??'}
                 </div>
                 
                 <div className="flex flex-col min-w-0">
