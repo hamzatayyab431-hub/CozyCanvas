@@ -99,6 +99,40 @@ export const promptCategories: PromptCategory[] = [
       'A grumpy broccoli wearing a leather jacket and sunglasses',
       'A sandwich trying to run away from a plate using toothpick legs'
     ]
+  },
+  {
+    id: 'food_delights',
+    name: '🧁 Cozy Café & Comfort Food',
+    description: 'Delicious bakery sweets, steamy soups, and cozy kitchen creations.',
+    prompts: [
+      'A stack of fluffy pancakes with a melting butter hat and maple syrup waterfall',
+      'A miniature mouse chef baking a tiny strawberry tart in an acorn cap',
+      'A boba tea drink where the tapioca pearls are smiling little creatures',
+      'A steaming bowl of ramen with a sleeping egg-yolk character on a noodle raft',
+      'A croissant curled up like a sleeping kitten on a café table',
+      'An artisan pizza with star-shaped pepperonis and a cheese moon',
+      'A floating doughnut spaceship exploring an espresso galaxy',
+      'A cozy gingerbread cottage with marshmallow smoke puffing from the chimney',
+      'A scoop of matcha ice cream wearing a waffle cone birthday hat',
+      'A honey jar with friendly bumblebees having an afternoon tea party'
+    ]
+  },
+  {
+    id: 'nature_wonders',
+    name: '🌿 Magical Nature & Flora',
+    description: 'Enchanted forests, bioluminescent blooms, and serene landscapes.',
+    prompts: [
+      'A glowing mushroom village nestled under giant ferns in the moonlight',
+      'A hollow mossy tree trunk transformed into a cozy reading nook',
+      'A crystal clear waterfall flowing into a pond of floating lotus lanterns',
+      'A mother deer with blooming flower antlers grazing in morning mist',
+      'A starry night sky reflected in a calm mirror-like alpine lake',
+      'A botanical greenhouse filled with flying glowing dandelion seeds',
+      'A bonsai tree with miniature cherry blossoms and a tiny wooden bridge',
+      'A gentle rainstorm over a field of giant lavender flowers',
+      'An ancient stone sundial overgrown with ivy and wild berries',
+      'A peaceful autumn tree with rainbow-colored falling leaves'
+    ]
   }
 ];
 
@@ -127,4 +161,36 @@ export function getRandomPrompt(categoryId?: string): { prompt: string; category
 
   const prompt = targetCategory.prompts[Math.floor(Math.random() * targetCategory.prompts.length)];
   return { prompt, categoryName: targetCategory.name };
+}
+
+/**
+ * Returns total count of all prompt items across all categories.
+ */
+export function getAllPromptsCount(): number {
+  return promptCategories.reduce((acc, cat) => acc + cat.prompts.length, 0);
+}
+
+/**
+ * Gets all prompts belonging to a specific category ID.
+ */
+export function getPromptsByCategory(categoryId: string): string[] {
+  const cat = promptCategories.find(c => c.id === categoryId);
+  return cat ? [...cat.prompts] : [];
+}
+
+/**
+ * Searches prompts across all categories matching a text query.
+ */
+export function searchPrompts(query: string): { prompt: string; categoryName: string; categoryId: string }[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const results: { prompt: string; categoryName: string; categoryId: string }[] = [];
+  for (const cat of promptCategories) {
+    for (const p of cat.prompts) {
+      if (p.toLowerCase().includes(q)) {
+        results.push({ prompt: p, categoryName: cat.name, categoryId: cat.id });
+      }
+    }
+  }
+  return results;
 }
