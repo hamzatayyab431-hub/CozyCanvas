@@ -37,6 +37,8 @@ export interface FreehandElement extends BaseElement {
   brushType?: BrushType;
 }
 
+export type StrokeDashStyle = 'solid' | 'dashed' | 'dotted';
+
 export interface ShapeElement extends BaseElement {
   type: 'line' | 'circle' | 'rectangle' | 'triangle';
   startX: number;
@@ -44,6 +46,7 @@ export interface ShapeElement extends BaseElement {
   endX: number;
   endY: number;
   fill?: boolean;
+  strokeDash?: StrokeDashStyle;
 }
 
 export interface TextElement extends BaseElement {
@@ -406,6 +409,23 @@ export function drawElement(ctx: CanvasRenderingContext2D, element: DrawingEleme
       break;
     }
 
+/**
+ * Helper to apply line dash patterns to the canvas context based on StrokeDashStyle.
+ */
+export function applyStrokeDash(
+  ctx: CanvasRenderingContext2D,
+  style?: StrokeDashStyle,
+  strokeWidth = 2
+) {
+  if (style === 'dashed') {
+    ctx.setLineDash([Math.max(6, strokeWidth * 2.5), Math.max(4, strokeWidth * 1.5)]);
+  } else if (style === 'dotted') {
+    ctx.setLineDash([Math.max(2, strokeWidth * 0.8), Math.max(4, strokeWidth * 1.2)]);
+  } else {
+    ctx.setLineDash([]);
+  }
+}
+
     case 'line': {
       ctx.save();
       ctx.globalAlpha = element.opacity;
@@ -413,6 +433,7 @@ export function drawElement(ctx: CanvasRenderingContext2D, element: DrawingEleme
       ctx.lineWidth = element.size;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+      applyStrokeDash(ctx, element.strokeDash, element.size);
       ctx.beginPath();
       ctx.moveTo(element.startX, element.startY);
       ctx.lineTo(element.endX, element.endY);
@@ -437,6 +458,7 @@ export function drawElement(ctx: CanvasRenderingContext2D, element: DrawingEleme
         ctx.lineWidth = element.size;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+        applyStrokeDash(ctx, element.strokeDash, element.size);
         ctx.strokeRect(x, y, w, h);
       }
       ctx.restore();
@@ -458,6 +480,7 @@ export function drawElement(ctx: CanvasRenderingContext2D, element: DrawingEleme
       } else {
         ctx.strokeStyle = element.color;
         ctx.lineWidth = element.size;
+        applyStrokeDash(ctx, element.strokeDash, element.size);
         ctx.stroke();
       }
       ctx.restore();
@@ -483,6 +506,7 @@ export function drawElement(ctx: CanvasRenderingContext2D, element: DrawingEleme
         ctx.lineWidth = element.size;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+        applyStrokeDash(ctx, element.strokeDash, element.size);
         ctx.stroke();
       }
       ctx.restore();
