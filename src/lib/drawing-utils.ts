@@ -667,6 +667,49 @@ export function getElementBoundingBox(element: DrawingElement): BoundingBox {
 }
 
 /**
+ * Checks if two axis-aligned bounding boxes overlap.
+ */
+export function doBoundingBoxesIntersect(a: BoundingBox, b: BoundingBox): boolean {
+  return (
+    a.minX <= b.maxX &&
+    a.maxX >= b.minX &&
+    a.minY <= b.maxY &&
+    a.maxY >= b.minY
+  );
+}
+
+/**
+ * Computes the tight overall bounding box enclosing an array of drawing elements.
+ */
+export function getDrawingElementsCombinedBounds(elements: DrawingElement[]): BoundingBox | null {
+  if (!elements.length) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const el of elements) {
+    const box = getElementBoundingBox(el);
+    if (box.minX < minX) minX = box.minX;
+    if (box.minY < minY) minY = box.minY;
+    if (box.maxX > maxX) maxX = box.maxX;
+    if (box.maxY > maxY) maxY = box.maxY;
+  }
+
+  if (minX === Infinity) return null;
+  return { minX, minY, maxX, maxY };
+}
+
+/**
+ * Fast spatial test to check if an element is inside or intersects the viewport rect.
+ */
+export function isElementInViewport(element: DrawingElement, viewport: BoundingBox): boolean {
+  const box = getElementBoundingBox(element);
+  return doBoundingBoxesIntersect(box, viewport);
+}
+
+
+/**
  * Returns true if client coordinate is near/inside drawing element.
  */
 export function isPointNearElement(
