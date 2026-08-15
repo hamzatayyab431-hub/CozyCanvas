@@ -21,6 +21,23 @@ export type ToolType =
 
 export type BrushType = 'pen' | 'marker' | 'airbrush' | 'pencil' | 'calligraphy';
 
+export type CanvasTextureTheme = 'parchment' | 'cream' | 'grid' | 'dots' | 'dark';
+
+export interface CanvasThemeConfig {
+  id: CanvasTextureTheme;
+  name: string;
+  bgColor: string;
+  gridColor?: string;
+}
+
+export const CANVAS_THEMES: Record<CanvasTextureTheme, CanvasThemeConfig> = {
+  parchment: { id: 'parchment', name: '📜 Warm Parchment', bgColor: '#fffbf0' },
+  cream: { id: 'cream', name: '🍦 Classic Cream', bgColor: '#ffffff' },
+  grid: { id: 'grid', name: '📐 Draft Grid', bgColor: '#fdfbf7', gridColor: '#e4dcd3' },
+  dots: { id: 'dots', name: '✨ Dot Matrix', bgColor: '#faf8f5', gridColor: '#ded8ce' },
+  dark: { id: 'dark', name: '🌙 Midnight Slate', bgColor: '#1e1e24', gridColor: '#2d2d38' },
+};
+
 export interface BaseElement {
   id: string;
   type: ToolType;
