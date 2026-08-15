@@ -261,3 +261,166 @@ export function playSuccess() {
   playDing(659.25, 0.0, 0.35);   // E5
   playDing(783.99, 0.15, 0.55);  // G5
 }
+
+/**
+ * Gentle click tone for switching brush presets (pen, marker, calligraphy, etc.)
+ */
+export function playBrushSwitch() {
+  if (!soundEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(600, now);
+  osc.frequency.exponentialRampToValueAtTime(320, now + 0.06);
+
+  gain.gain.setValueAtTime(0.12 * soundVolume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+  osc.start(now);
+  osc.stop(now + 0.07);
+}
+
+/**
+ * Crystalline plink tone when selecting a new color from the palette
+ */
+export function playColorPick() {
+  if (!soundEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(880, now);
+  osc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.08); // A5 -> D6
+
+  gain.gain.setValueAtTime(0.08 * soundVolume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+  osc.start(now);
+  osc.stop(now + 0.1);
+}
+
+/**
+ * Soft descending swoosh for undo action
+ */
+export function playUndo() {
+  if (!soundEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(520, now);
+  osc.frequency.exponentialRampToValueAtTime(260, now + 0.1);
+
+  gain.gain.setValueAtTime(0.1 * soundVolume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+  osc.start(now);
+  osc.stop(now + 0.11);
+}
+
+/**
+ * Soft ascending swoosh for redo action
+ */
+export function playRedo() {
+  if (!soundEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(260, now);
+  osc.frequency.exponentialRampToValueAtTime(520, now + 0.1);
+
+  gain.gain.setValueAtTime(0.1 * soundVolume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+  osc.start(now);
+  osc.stop(now + 0.11);
+}
+
+/**
+ * Soft paper brush wipe tone when clearing the canvas or a layer
+ */
+export function playClear() {
+  if (!soundEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(320, now);
+  osc.frequency.exponentialRampToValueAtTime(140, now + 0.18);
+
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(800, now);
+  filter.frequency.exponentialRampToValueAtTime(200, now + 0.18);
+
+  gain.gain.setValueAtTime(0.12 * soundVolume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+  osc.start(now);
+  osc.stop(now + 0.2);
+}
+
+/**
+ * Satisfying wooden stamp tap sound
+ */
+export function playStamp() {
+  if (!soundEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(240, now);
+  osc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
+
+  gain.gain.setValueAtTime(0.22 * soundVolume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+  osc.start(now);
+  osc.stop(now + 0.1);
+}
+
