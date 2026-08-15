@@ -2,20 +2,24 @@ import { useEffect } from 'react';
 import { ToolType } from '../lib/drawing-utils';
 
 export interface ShortcutHandlers {
-  setTool: (tool: ToolType) => void;
-  onUndo: () => void;
-  onRedo: () => void;
-  onClear: () => void;
+  setTool?: (tool: ToolType) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onClear?: () => void;
+  onIncreaseBrushSize?: () => void;
+  onDecreaseBrushSize?: () => void;
+  onToggleSymmetry?: () => void;
+  onToggleGrid?: () => void;
 }
 
 export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input or textarea
+      // Don't trigger if user is typing in an input, textarea, or contenteditable
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
-        (e.target as HTMLElement).isContentEditable
+        (e.target as HTMLElement)?.isContentEditable
       ) {
         return;
       }
@@ -24,40 +28,64 @@ export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
-          handlers.onRedo();
+          handlers.onRedo?.();
         } else {
-          handlers.onUndo();
+          handlers.onUndo?.();
         }
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
-        handlers.onRedo();
+        handlers.onRedo?.();
         return;
       }
 
-      // Tools
+      // Brush size adjustments: '[' decrease, ']' increase
+      if (e.key === '[') {
+        e.preventDefault();
+        handlers.onDecreaseBrushSize?.();
+        return;
+      }
+      if (e.key === ']') {
+        e.preventDefault();
+        handlers.onIncreaseBrushSize?.();
+        return;
+      }
+
+      // Single-key tool selectors
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         switch (e.key.toLowerCase()) {
           case 'b':
           case 'p':
-            handlers.setTool('pen');
+            handlers.setTool?.('pen');
             break;
           case 'e':
-            handlers.setTool('eraser');
+            handlers.setTool?.('eraser');
             break;
           case 'f':
-            handlers.setTool('fill');
+            handlers.setTool?.('fill');
             break;
           case 't':
-            handlers.setTool('text');
+            handlers.setTool?.('text');
             break;
           case 's':
           case 'v':
-            handlers.setTool('select');
+            handlers.setTool?.('select');
             break;
           case 'i':
-            handlers.setTool('eyedropper');
+            handlers.setTool?.('eyedropper');
+            break;
+          case 'l':
+            handlers.setTool?.('line');
+            break;
+          case 'r':
+            handlers.setTool?.('rectangle');
+            break;
+          case 'c':
+            handlers.setTool?.('circle');
+            break;
+          case 'g':
+            handlers.onToggleGrid?.();
             break;
         }
       }
@@ -67,3 +95,4 @@ export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handlers]);
 };
+
