@@ -842,4 +842,102 @@ export function denormalizePoint(
   };
 }
 
+/**
+ * Draws a 5-pointed (or custom point count) star path onto a 2D canvas context.
+ */
+export function drawStarPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  spikes = 5,
+  outerRadius = 24,
+  innerRadius = 12
+) {
+  let rot = (Math.PI / 2) * 3;
+  let x = cx;
+  let y = cy;
+  const step = Math.PI / spikes;
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - outerRadius);
+
+  for (let i = 0; i < spikes; i++) {
+    x = cx + Math.cos(rot) * outerRadius;
+    y = cy + Math.sin(rot) * outerRadius;
+    ctx.lineTo(x, y);
+    rot += step;
+
+    x = cx + Math.cos(rot) * innerRadius;
+    y = cy + Math.sin(rot) * innerRadius;
+    ctx.lineTo(x, y);
+    rot += step;
+  }
+  ctx.lineTo(cx, cy - outerRadius);
+  ctx.closePath();
+}
+
+/**
+ * Draws a smooth symmetrical heart shape path inside a given bounding box.
+ */
+export function drawHeartPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+) {
+  const topCurveHeight = height * 0.3;
+  ctx.beginPath();
+  ctx.moveTo(x + width / 2, y + height);
+
+  // Left curve to top
+  ctx.bezierCurveTo(
+    x,
+    y + height * 0.65,
+    x,
+    y + topCurveHeight,
+    x + width / 2,
+    y + topCurveHeight
+  );
+
+  // Right curve to bottom
+  ctx.bezierCurveTo(
+    x + width,
+    y + topCurveHeight,
+    x + width,
+    y + height * 0.65,
+    x + width / 2,
+    y + height
+  );
+
+  ctx.closePath();
+}
+
+/**
+ * Draws a regular n-sided polygon path (hexagon, pentagon, octagon, etc.).
+ */
+export function drawPolygonPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  sides = 6
+) {
+  if (sides < 3) return;
+  const step = (Math.PI * 2) / sides;
+  ctx.beginPath();
+  for (let i = 0; i < sides; i++) {
+    const angle = i * step - Math.PI / 2;
+    const px = cx + radius * Math.cos(angle);
+    const py = cy + radius * Math.sin(angle);
+    if (i === 0) {
+      ctx.moveTo(px, py);
+    } else {
+      ctx.lineTo(px, py);
+    }
+  }
+  ctx.closePath();
+}
+
+
 
