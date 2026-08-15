@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Heart, Star, Crown, History, Image as ImageIcon, Sparkles, Download } from 'lucide-react';
+import { Heart, Star, Crown, History, Image as ImageIcon, Sparkles, Download, Share2, Check, ArrowUpDown } from 'lucide-react';
+import { playPop, playSuccess } from '../lib/sound-utils';
 
 export interface GalleryDrawing {
   id: string;
@@ -27,6 +28,20 @@ interface GalleryProps {
 export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'mine' | 'partners' | 'highly_rated'>('all');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleCopyLink = async () => {
+    if (typeof window === 'undefined') return;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopiedLink(true);
+      playSuccess();
+      setTimeout(() => setCopiedLink(false), 2200);
+    } catch {
+      // Fallback
+    }
+  };
 
   // Parse reactions from canvas_data (which can store reactions: Record<string, string>)
   const getReactionCounts = (drawing: GalleryDrawing) => {
@@ -93,7 +108,10 @@ export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) =
   });
 
   const sortedRounds = Object.entries(roundsMap)
-    .sort((a, b) => b[1].roundNumber - a[1].roundNumber)
+    .sort((a, b) => sortOrder === 'desc' 
+      ? b[1].roundNumber - a[1].roundNumber 
+      : a[1].roundNumber - b[1].roundNumber
+    )
     .map(([roundId, data]) => ({
       roundId,
       ...data,
@@ -127,14 +145,41 @@ export const Gallery: React.FC<GalleryProps> = ({ drawings, currentPlayerId }) =
 
   return (
     <div className="bg-cozy-card border border-cozy-border p-5 rounded-2xl shadow-[0_4px_12px_rgba(232,180,184,0.15)] flex flex-col gap-5 select-none">
-      <div className="flex items-center justify-between border-b border-cozy-border pb-3">
+      <div className="flex items-center justify-between border-b border-cozy-border pb-3 flex-wrap gap-2">
         <h3 className="text-sm font-serif font-bold uppercase tracking-wider text-cozy-muted flex items-center gap-2">
           <Sparkles size={16} className="text-cozy-primary" />
           Exhibition Gallery
         </h3>
-        <span className="text-[9.5px] font-bold text-cozy-primary bg-cozy-primary/10 px-2 py-0.5 rounded-full">
-          {drawings.length} total
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+              playPop();
+            }}
+            className="flex items-center gap-1 text-[10px] font-bold text-cozy-muted hover:text-cozy-fg bg-cozy-bg border border-cozy-border px-2 py-1 rounded-lg transition-colors cursor-pointer"
+            title={sortOrder === 'desc' ? 'Showing Newest First' : 'Showing Oldest First'}
+          >
+            <ArrowUpDown size={12} />
+            <span>{sortOrder === 'desc' ? 'Newest' : 'Oldest'}</span>
+          </button>
+
+          <button
+            onClick={handleCopyLink}
+            className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+              copiedLink
+                ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                : 'bg-cozy-bg text-cozy-fg border-cozy-border hover:bg-cozy-border'
+            }`}
+            title="Copy share link"
+          >
+            {copiedLink ? <Check size={12} /> : <Share2 size={12} />}
+            <span>{copiedLink ? 'Copied!' : 'Share'}</span>
+          </button>
+
+          <span className="text-[9.5px] font-bold text-cozy-primary bg-cozy-primary/10 px-2 py-0.5 rounded-full">
+            {drawings.length} total
+          </span>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
