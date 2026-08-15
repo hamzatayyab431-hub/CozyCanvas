@@ -27,7 +27,19 @@ import {
 } from 'lucide-react';
 import { ToolType, BrushType } from '../lib/drawing-utils';
 import { LayerConfig } from './DrawingCanvas';
-import { playPop, isSoundEnabled, setSoundEnabled, getSoundVolume, setSoundVolume } from '../lib/sound-utils';
+import {
+  playPop,
+  playColorPick,
+  playBrushSwitch,
+  playUndo,
+  playRedo,
+  playClear,
+  playStamp,
+  isSoundEnabled,
+  setSoundEnabled,
+  getSoundVolume,
+  setSoundVolume
+} from '../lib/sound-utils';
 
 export interface DrawingToolbarProps {
   tool: ToolType;
@@ -941,10 +953,11 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
           <button
             onClick={() => {
               onUndo();
-              playPop();
+              playUndo();
             }}
             disabled={!canUndo}
-            title="Undo"
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo drawing action"
             className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg hover:bg-cozy-bg hover:text-cozy-fg disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
           >
             <Undo2 size={14} />
@@ -952,10 +965,11 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
           <button
             onClick={() => {
               onRedo();
-              playPop();
+              playRedo();
             }}
             disabled={!canRedo}
-            title="Redo"
+            title="Redo (Ctrl+Y or Ctrl+Shift+Z)"
+            aria-label="Redo drawing action"
             className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg hover:bg-cozy-bg hover:text-cozy-fg disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
           >
             <Redo2 size={14} />
@@ -970,6 +984,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
               playPop();
             }}
             title="Zoom Out"
+            aria-label="Zoom out canvas"
             className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg hover:bg-cozy-bg hover:text-cozy-fg transition-all active:scale-95 cursor-pointer"
           >
             <ZoomOut size={14} />
@@ -980,6 +995,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
               playPop();
             }}
             title="Reset Zoom"
+            aria-label="Reset zoom to 100%"
             className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg hover:bg-cozy-bg hover:text-cozy-fg transition-all active:scale-95 cursor-pointer"
           >
             <Maximize size={14} />
@@ -990,6 +1006,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
               playPop();
             }}
             title="Zoom In"
+            aria-label="Zoom in canvas"
             className="p-2.5 rounded-xl border border-cozy-border bg-cozy-card text-cozy-fg hover:bg-cozy-bg hover:text-cozy-fg transition-all active:scale-95 cursor-pointer"
           >
             <ZoomIn size={14} />
@@ -1001,9 +1018,10 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
           <button
             onClick={() => {
               onClear();
-              playPop();
+              playClear();
             }}
             title="Clear Canvas"
+            aria-label="Clear active canvas layer"
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-rose-200 bg-rose-50/50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition-all active:scale-95 font-semibold text-xs cursor-pointer"
           >
             <Trash2 size={14} />
@@ -1015,6 +1033,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
               playPop();
             }}
             title="Save PNG"
+            aria-label="Export drawing snapshot as PNG"
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-emerald-600 bg-emerald-500 text-white hover:bg-emerald-600 shadow-md shadow-emerald-500/10 transition-all active:scale-95 font-semibold text-xs cursor-pointer"
           >
             <Download size={14} />
